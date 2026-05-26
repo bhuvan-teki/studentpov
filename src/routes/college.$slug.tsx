@@ -1,8 +1,7 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Hash, Heart, MessageCircle, Bookmark, Share2, Send, Star, ArrowLeft,
-  TrendingUp, Users, Activity, Award,
+  Hash, Heart, MessageCircle, Bookmark, Share2, Send, ArrowLeft, Menu, X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -60,6 +59,7 @@ function CollegeServer() {
   const [verified, setVerified] = useState(false);
   const [composer, setComposer] = useState("");
   const [loading, setLoading] = useState(true);
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -127,66 +127,121 @@ function CollegeServer() {
     return <div className="min-h-screen grid place-items-center text-muted-foreground text-sm">Loading community…</div>;
   }
 
-  return (
-    <div className="h-screen flex bg-background text-foreground overflow-hidden">
-      {/* LEFT SIDEBAR */}
-      <aside className="w-[260px] shrink-0 border-r border-white/[0.04] flex flex-col bg-black/40">
-        <div className="px-4 py-4 border-b border-white/[0.04] flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-white/20 to-white/5 border border-white/10 grid place-items-center text-[12px] font-semibold">
-            {initials}
-          </div>
-          <div className="min-w-0">
-            <div className="text-[13px] font-semibold truncate">{college.name}</div>
-            <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">Server</div>
-          </div>
-        </div>
+  const selectChannel = (ch: string) => {
+    setActiveChannel(ch);
+    setNavOpen(false);
+  };
 
-        <div className="flex-1 overflow-y-auto px-2 py-3 space-y-5">
-          {CHANNEL_GROUPS.map((g) => (
-            <div key={g.label}>
-              <div className="px-2 mb-1.5 text-[10px] uppercase tracking-[0.16em] text-muted-foreground/60">
-                {g.label}
-              </div>
-              <div>
-                {g.channels.map((ch) => {
-                  const active = ch === activeChannel;
-                  return (
-                    <button
-                      key={ch}
-                      onClick={() => setActiveChannel(ch)}
-                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition ${
-                        active
-                          ? "bg-white/[0.06] text-foreground"
-                          : "text-muted-foreground hover:text-foreground hover:bg-white/[0.03]"
-                      }`}
-                    >
-                      <Hash className="h-3.5 w-3.5 opacity-70" />
-                      <span className="truncate">{ch}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+  const Sidebar = (
+    <div className="h-full flex flex-col bg-black/60 md:bg-black/40">
+      <div className="px-4 py-4 border-b border-white/[0.04] flex items-center gap-3">
+        <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-white/20 to-white/5 border border-white/10 grid place-items-center text-[12px] font-semibold">
+          {initials}
         </div>
-
-        <Link
-          to="/communities"
-          className="flex items-center gap-2 px-4 py-3 border-t border-white/[0.04] text-[12px] text-muted-foreground hover:text-foreground transition"
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-semibold truncate">{college.name}</div>
+          <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">Server</div>
+        </div>
+        <button
+          onClick={() => setNavOpen(false)}
+          className="md:hidden h-8 w-8 grid place-items-center text-muted-foreground hover:text-foreground"
+          aria-label="Close channels"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> All communities
-        </Link>
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-2 py-3 space-y-5">
+        {CHANNEL_GROUPS.map((g) => (
+          <div key={g.label}>
+            <div className="px-2 mb-1.5 text-[10px] uppercase tracking-[0.16em] text-muted-foreground/60">
+              {g.label}
+            </div>
+            <div>
+              {g.channels.map((ch) => {
+                const active = ch === activeChannel;
+                return (
+                  <button
+                    key={ch}
+                    onClick={() => selectChannel(ch)}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition ${
+                      active
+                        ? "bg-white/[0.06] text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/[0.03]"
+                    }`}
+                  >
+                    <Hash className="h-3.5 w-3.5 opacity-70" />
+                    <span className="truncate">{ch}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="h-screen flex flex-col md:flex-row bg-background text-foreground overflow-hidden">
+      {/* Mobile top bar */}
+      <div className="md:hidden h-14 shrink-0 px-3 border-b border-white/[0.04] flex items-center gap-2 bg-black/40 backdrop-blur">
+        <button
+          onClick={() => navigate({ to: "/communities" })}
+          className="h-9 px-3 rounded-lg flex items-center gap-1.5 text-[13px] text-foreground/90 hover:bg-white/[0.05] transition"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+        <div className="flex-1 min-w-0 text-center">
+          <div className="text-[13px] font-semibold truncate">{college.name}</div>
+        </div>
+        <button
+          onClick={() => setNavOpen(true)}
+          className="h-9 w-9 grid place-items-center rounded-lg text-foreground/90 hover:bg-white/[0.05] transition"
+          aria-label="Open channels"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* DESKTOP SIDEBAR */}
+      <aside className="hidden md:flex w-[260px] shrink-0 border-r border-white/[0.04] flex-col">
+        <button
+          onClick={() => navigate({ to: "/communities" })}
+          className="m-3 mb-0 h-9 px-3 rounded-lg flex items-center gap-2 text-[12px] text-foreground/85 hover:bg-white/[0.05] border border-white/[0.06] transition"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to communities
+        </button>
+        <div className="flex-1 min-h-0">{Sidebar}</div>
       </aside>
+
+      {/* MOBILE SIDEBAR (drawer) */}
+      {navOpen && (
+        <>
+          <div
+            className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+            onClick={() => setNavOpen(false)}
+          />
+          <aside className="md:hidden fixed inset-y-0 left-0 w-[280px] z-50 border-r border-white/[0.06]">
+            {Sidebar}
+          </aside>
+        </>
+      )}
 
       {/* CENTER FEED */}
       <main className="flex-1 flex flex-col min-w-0">
-        <div className="h-14 px-6 border-b border-white/[0.04] flex items-center gap-3">
+        <div className="hidden md:flex h-14 px-6 border-b border-white/[0.04] items-center gap-3">
           <Hash className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-[14px] font-semibold">{activeChannel}</h2>
           <span className="text-[12px] text-muted-foreground/70">· anonymous & verified</span>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-3">
+        <div className="md:hidden px-4 py-3 border-b border-white/[0.04] flex items-center gap-2">
+          <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+          <h2 className="text-[13px] font-semibold">{activeChannel}</h2>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5 md:py-6 space-y-3">
           {reviews.length === 0 ? (
             <div className="glass-card rounded-2xl p-10 text-center">
               <div className="text-[15px] font-medium text-foreground">No posts yet</div>
@@ -200,7 +255,7 @@ function CollegeServer() {
         </div>
 
         {/* Composer */}
-        <div className="px-6 pb-6">
+        <div className="px-4 md:px-6 pb-4 md:pb-6">
           <div className="glass-card rounded-2xl p-3 flex items-end gap-2">
             <textarea
               value={composer}
@@ -224,39 +279,6 @@ function CollegeServer() {
           </div>
         </div>
       </main>
-
-      {/* RIGHT SIDEBAR */}
-      <aside className="w-[300px] shrink-0 border-l border-white/[0.04] hidden lg:flex flex-col overflow-y-auto bg-black/30">
-        <div className="px-5 py-5 space-y-5">
-          <Panel title="Community insights">
-            <RatingRow label="Overall" value={4.2} />
-            <RatingRow label="Placements" value={3.8} />
-            <RatingRow label="Faculty" value={4.0} />
-            <RatingRow label="Hostel" value={3.5} />
-          </Panel>
-
-          <Panel title="Activity">
-            <InsightRow icon={<Users className="h-3.5 w-3.5" />} label="Verified students" value={college.total_verified_students.toLocaleString("en-IN")} />
-            <InsightRow icon={<Activity className="h-3.5 w-3.5" />} label="Active right now" value={college.live_active_students.toLocaleString("en-IN")} live />
-            <InsightRow icon={<TrendingUp className="h-3.5 w-3.5" />} label="Posts this week" value="218" />
-          </Panel>
-
-          <Panel title="Top contributors">
-            {["anon_owl_204", "silent_dev_88", "campus_truth", "fresher_2024"].map((u, i) => (
-              <div key={u} className="flex items-center gap-3 py-1.5">
-                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-white/20 to-white/5 border border-white/10 grid place-items-center text-[10px]">
-                  {u[0].toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12px] truncate">{u}</div>
-                  <div className="text-[10px] text-muted-foreground">{120 - i * 18} contributions</div>
-                </div>
-                <Award className="h-3.5 w-3.5 text-muted-foreground" />
-              </div>
-            ))}
-          </Panel>
-        </div>
-      </aside>
     </div>
   );
 }
@@ -304,42 +326,5 @@ function Badge({ children }: { children: React.ReactNode }) {
     <span className="px-1.5 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.06] text-foreground/80 text-[10px]">
       {children}
     </span>
-  );
-}
-
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="glass-card rounded-xl p-4">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70 mb-3">
-        {title}
-      </div>
-      <div className="space-y-2">{children}</div>
-    </div>
-  );
-}
-
-function RatingRow({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex items-center justify-between text-[12px]">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="flex items-center gap-1 text-foreground">
-        <Star className="h-3 w-3 fill-foreground/80 text-foreground/80" />
-        {value.toFixed(1)}
-      </span>
-    </div>
-  );
-}
-
-function InsightRow({
-  icon, label, value, live,
-}: { icon: React.ReactNode; label: string; value: string; live?: boolean }) {
-  return (
-    <div className="flex items-center justify-between text-[12px]">
-      <span className="text-muted-foreground flex items-center gap-1.5">{icon}{label}</span>
-      <span className="text-foreground tabular-nums flex items-center gap-1.5">
-        {value}
-        {live && <span className="pulse-dot !w-1.5 !h-1.5" />}
-      </span>
-    </div>
   );
 }
