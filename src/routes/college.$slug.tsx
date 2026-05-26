@@ -26,12 +26,18 @@ type Review = {
   created_at: string;
 };
 
-type Channel = {
-  id: string;
-  category: string;
-  name: string;
-  sort_order: number;
-};
+const CHANNEL_GROUPS: { label: string; channels: string[] }[] = [
+  { label: "Start Here", channels: ["welcome", "ask-seniors", "college-overview"] },
+  { label: "Admissions", channels: ["admission-process", "fee-structure", "hidden-costs", "management-quota"] },
+  { label: "Placements", channels: ["placement-reality", "internship-opportunities", "highest-packages", "placement-scams"] },
+  { label: "Academics", channels: ["faculty-reviews", "attendance-pressure", "exam-difficulty", "lab-facilities"] },
+  { label: "Campus Life", channels: ["hostel-life", "food-quality", "campus-environment", "strictness"] },
+  { label: "Warnings & Truth", channels: ["reality-check", "expectations-vs-reality", "scams-and-fines", "mental-pressure"] },
+  { label: "Branches", channels: ["cse", "ai-ml", "ece", "mechanical", "mba"] },
+  { label: "Guidance", channels: ["roadmap-guidance", "internships", "gate-preparation", "higher-studies"] },
+  { label: "Media", channels: ["placement-proof", "campus-photos", "hostel-photos"] },
+  { label: "Free Talk", channels: ["general-chat", "memes", "random"] },
+];
 
 export const Route = createFileRoute("/college/$slug")({
   head: ({ params }) => ({
@@ -47,18 +53,14 @@ function CollegeServer() {
   const { slug } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  
   const [college, setCollege] = useState<College | null>(null);
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [activeChannel, setActiveChannel] = useState("");
+  const [activeChannel, setActiveChannel] = useState("welcome");
   const [reviews, setReviews] = useState<Review[]>([]);
-  
   const [verified, setVerified] = useState(false);
   const [composer, setComposer] = useState("");
   const [loading, setLoading] = useState(true);
   const [navOpen, setNavOpen] = useState(false);
 
-  // 1. Fetch College
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -72,29 +74,8 @@ function CollegeServer() {
     return () => { alive = false; };
   }, [slug, navigate]);
 
-  // 2. Fetch Channels Dynamically
   useEffect(() => {
-    supabase.from("channels").select("*").order("sort_order", { ascending: true })
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          setChannels(data as Channel[]);
-          setActiveChannel(data[0].name); 
-        }
-      });
-  }, []);
-
-  // Group channels by category for the sidebar
-  const groupedChannels = useMemo(() => {
-    return channels.reduce((acc, channel) => {
-      if (!acc[channel.category]) acc[channel.category] = [];
-      acc[channel.category].push(channel.name);
-      return acc;
-    }, {} as Record<string, string[]>);
-  }, [channels]);
-
-  // 3. Fetch Posts for Active Channel
-  useEffect(() => {
-    if (!college || !activeChannel) return;
+    if (!college) return;
     supabase
       .from("reviews")
       .select("*")
@@ -105,7 +86,6 @@ function CollegeServer() {
       .then(({ data }) => setReviews((data ?? []) as Review[]));
   }, [college, activeChannel]);
 
-  // 4. Verify User Status
   useEffect(() => {
     if (!user) { setVerified(false); return; }
     supabase
@@ -121,7 +101,6 @@ function CollegeServer() {
     if (!verified) { toast.error("Only verified students can post"); return; }
     if (composer.trim().length < 2) return;
     if (!college) return;
-    
     const { data, error } = await supabase
       .from("reviews")
       .insert({
@@ -129,12 +108,11 @@ function CollegeServer() {
         college_id: college.id,
         channel: activeChannel,
         content: composer.trim(),
-        branch: "Anonymous", 
+        branch: "Anonymous",
         year: "Student",
       })
       .select()
       .single();
-      
     if (error) { toast.error(error.message); return; }
     setReviews((r) => [data as Review, ...r]);
     setComposer("");
@@ -174,13 +152,13 @@ function CollegeServer() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-3 space-y-5">
-        {Object.entries(groupedChannels).map(([category, channelList]) => (
-          <div key={category}>
+        {CHANNEL_GROUPS.map((g) => (
+          <div key={g.label}>
             <div className="px-2 mb-1.5 text-[10px] uppercase tracking-[0.16em] text-muted-foreground/60">
-              {category}
+              {g.label}
             </div>
             <div>
-              {channelList.map((ch) => {
+              {g.channels.map((ch) => {
                 const active = ch === activeChannel;
                 return (
                   <button
@@ -244,7 +222,7 @@ function CollegeServer() {
             className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
             onClick={() => setNavOpen(false)}
           />
-          <aside className="md:hidden fixed inset-y-0 left-0 w-[280px] z-50 border-r border-white/[0.06]">
+          <aside className="md:hidden fixed inset-y-0 left-0 w-[280px] z-50 border-r border-white/[0.06] bg-background">
             {Sidebar}
           </aside>
         </>
