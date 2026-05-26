@@ -106,7 +106,7 @@ function LoginPage() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="yourname@college.edu"
+                    placeholder="yourname@chaitanya.edu.in"
                     className="glass-input w-full rounded-xl pl-10 pr-3 py-3 text-sm text-foreground placeholder:text-muted-foreground/70"
                   />
                 </div>
