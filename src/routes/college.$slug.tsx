@@ -1,51 +1,15 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import {
-  Hash, Heart, MessageCircle, Bookmark, Share2, Send, ArrowLeft, Menu, X,
-} from "lucide-react";
+import { Hash, Heart, MessageCircle, Bookmark, Share2, Send, ArrowLeft, Menu, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 
-type College = {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  total_verified_students: number;
-  live_active_students: number;
-};
-
-type Review = {
-  id: string;
-  user_id: string;
-  channel: string;
-  content: string;
-  branch: string | null;
-  year: string | null;
-  created_at: string;
-};
-
-const CHANNEL_GROUPS: { label: string; channels: string[] }[] = [
-  { label: "Start Here", channels: ["welcome", "ask-seniors", "college-overview"] },
-  { label: "Admissions", channels: ["admission-process", "fee-structure", "hidden-costs", "management-quota"] },
-  { label: "Placements", channels: ["placement-reality", "internship-opportunities", "highest-packages", "placement-scams"] },
-  { label: "Academics", channels: ["faculty-reviews", "attendance-pressure", "exam-difficulty", "lab-facilities"] },
-  { label: "Campus Life", channels: ["hostel-life", "food-quality", "campus-environment", "strictness"] },
-  { label: "Warnings & Truth", channels: ["reality-check", "expectations-vs-reality", "scams-and-fines", "mental-pressure"] },
-  { label: "Branches", channels: ["cse", "ai-ml", "ece", "mechanical", "mba"] },
-  { label: "Guidance", channels: ["roadmap-guidance", "internships", "gate-preparation", "higher-studies"] },
-  { label: "Media", channels: ["placement-proof", "campus-photos", "hostel-photos"] },
-  { label: "Free Talk", channels: ["general-chat", "memes", "random"] },
-];
+type College = { id: string; name: string; slug: string; description: string | null; };
+type Review = { id: string; user_id: string; channel: string; content: string; branch: string | null; year: string | null; created_at: string; };
+type Channel = { id: string; category: string; name: string; sort_order: number; };
 
 export const Route = createFileRoute("/college/$slug")({
-  head: ({ params }) => ({
-    meta: [
-      { title: `${params.slug} community — Studentpov` },
-      { name: "description", content: "Verified student discussions, anonymous and honest." },
-    ],
-  }),
   component: CollegeServer,
 });
 
@@ -53,46 +17,66 @@ function CollegeServer() {
   const { slug } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  
   const [college, setCollege] = useState<College | null>(null);
-  const [activeChannel, setActiveChannel] = useState("welcome");
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [activeChannel, setActiveChannel] = useState("");
   const [reviews, setReviews] = useState<Review[]>([]);
+  
   const [verified, setVerified] = useState(false);
   const [composer, setComposer] = useState("");
   const [loading, setLoading] = useState(true);
   const [navOpen, setNavOpen] = useState(false);
 
+  // Fetch College
   useEffect(() => {
     let alive = true;
-    (async () => {
-      const { data: c } = await supabase
-        .from("colleges").select("*").eq("slug", slug).maybeSingle();
+    supabase.from("colleges").select("*").eq("slug", slug).maybeSingle().then(({ data }) => {
       if (!alive) return;
-      if (!c) { navigate({ to: "/communities" }); return; }
-      setCollege(c as College);
+      if (!data) { navigate({ to: "/communities" }); return; }
+      setCollege(data as College);
       setLoading(false);
-    })();
+    });
     return () => { alive = false; };
   }, [slug, navigate]);
 
+  // Fetch Channels
   useEffect(() => {
-    if (!college) return;
-    supabase
-      .from("reviews")
-      .select("*")
-      .eq("college_id", college.id)
-      .eq("channel", activeChannel)
-      .order("created_at", { ascending: false })
-      .limit(50)
-      .then(({ data }) => setReviews((data ?? []) as Review[]));
+    supabase.from("channels").select("*").order("sort_order", { ascending: true })
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setChannels(data as Channel[]);
+          setActiveChannel(data[0].name); 
+        }
+      });
+  }, []);
+
+  const groupedChannels = useMemo(() => {
+    return channels.reduce((acc, channel) => {
+      if (!acc[channel.category]) acc[channel.category] = [];
+      acc[channel.category].push(channel.name);
+      return acc;
+    }, {} as Record<string, string[]>);
+  }, [channels]);
+
+  // Fetch Posts for Active Channel
+  useEffect(() => {
+    if (!college || !activeChannel) return;
+    const fetchPosts = async () => {
+      const { data } = await supabase.from("reviews")
+        .select("*").eq("college_id", college.id).eq("channel", activeChannel)
+        .order("created_at", { ascending: false }).limit(50);
+      setReviews((data ?? []) as Review[]);
+    };
+    fetchPosts();
+    
+    // Optional: Realtime subscription here if desired in the future
   }, [college, activeChannel]);
 
+  // Verify User Status
   useEffect(() => {
     if (!user) { setVerified(false); return; }
-    supabase
-      .from("profiles")
-      .select("verification_status")
-      .eq("id", user.id)
-      .maybeSingle()
+    supabase.from("profiles").select("verification_status").eq("id", user.id).maybeSingle()
       .then(({ data }) => setVerified(data?.verification_status === "verified"));
   }, [user]);
 
@@ -101,6 +85,7 @@ function CollegeServer() {
     if (!verified) { toast.error("Only verified students can post"); return; }
     if (composer.trim().length < 2) return;
     if (!college) return;
+    
     const { data, error } = await supabase
       .from("reviews")
       .insert({
@@ -108,29 +93,22 @@ function CollegeServer() {
         college_id: college.id,
         channel: activeChannel,
         content: composer.trim(),
-        branch: "CSE",
-        year: "3rd Year",
+        branch: "Anonymous", 
+        year: "Student",
       })
       .select()
       .single();
+      
     if (error) { toast.error(error.message); return; }
     setReviews((r) => [data as Review, ...r]);
     setComposer("");
   };
 
-  const initials = useMemo(
-    () => college?.name.split(" ").slice(0, 2).map((s) => s[0]).join("") ?? "",
-    [college],
-  );
+  const initials = useMemo(() => college?.name.split(" ").slice(0, 2).map((s) => s[0]).join("") ?? "", [college]);
 
   if (loading || !college) {
-    return <div className="min-h-screen grid place-items-center text-muted-foreground text-sm">Loading community…</div>;
+    return <div className="min-h-screen bg-background grid place-items-center text-muted-foreground text-sm">Loading community…</div>;
   }
-
-  const selectChannel = (ch: string) => {
-    setActiveChannel(ch);
-    setNavOpen(false);
-  };
 
   const Sidebar = (
     <div className="h-full flex flex-col bg-black/60 md:bg-black/40">
@@ -142,32 +120,26 @@ function CollegeServer() {
           <div className="text-[13px] font-semibold truncate">{college.name}</div>
           <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">Server</div>
         </div>
-        <button
-          onClick={() => setNavOpen(false)}
-          className="md:hidden h-8 w-8 grid place-items-center text-muted-foreground hover:text-foreground"
-          aria-label="Close channels"
-        >
+        <button onClick={() => setNavOpen(false)} className="md:hidden h-8 w-8 grid place-items-center text-muted-foreground hover:text-foreground">
           <X className="h-4 w-4" />
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-3 space-y-5">
-        {CHANNEL_GROUPS.map((g) => (
-          <div key={g.label}>
+        {Object.entries(groupedChannels).map(([category, channelList]) => (
+          <div key={category}>
             <div className="px-2 mb-1.5 text-[10px] uppercase tracking-[0.16em] text-muted-foreground/60">
-              {g.label}
+              {category}
             </div>
             <div>
-              {g.channels.map((ch) => {
+              {channelList.map((ch) => {
                 const active = ch === activeChannel;
                 return (
                   <button
                     key={ch}
-                    onClick={() => selectChannel(ch)}
+                    onClick={() => { setActiveChannel(ch); setNavOpen(false); }}
                     className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition ${
-                      active
-                        ? "bg-white/[0.06] text-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-white/[0.03]"
+                      active ? "bg-white/[0.06] text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-white/[0.03]"
                     }`}
                   >
                     <Hash className="h-3.5 w-3.5 opacity-70" />
@@ -186,20 +158,13 @@ function CollegeServer() {
     <div className="h-screen flex flex-col md:flex-row bg-background text-foreground overflow-hidden">
       {/* Mobile top bar */}
       <div className="md:hidden h-14 shrink-0 px-3 border-b border-white/[0.04] flex items-center gap-2 bg-black/40 backdrop-blur">
-        <button
-          onClick={() => navigate({ to: "/communities" })}
-          className="h-9 px-3 rounded-lg flex items-center gap-1.5 text-[13px] text-foreground/90 hover:bg-white/[0.05] transition"
-        >
+        <button onClick={() => navigate({ to: "/communities" })} className="h-9 px-3 rounded-lg flex items-center gap-1.5 text-[13px] text-foreground/90 hover:bg-white/[0.05] transition">
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
         <div className="flex-1 min-w-0 text-center">
           <div className="text-[13px] font-semibold truncate">{college.name}</div>
         </div>
-        <button
-          onClick={() => setNavOpen(true)}
-          className="h-9 w-9 grid place-items-center rounded-lg text-foreground/90 hover:bg-white/[0.05] transition"
-          aria-label="Open channels"
-        >
+        <button onClick={() => setNavOpen(true)} className="h-9 w-9 grid place-items-center rounded-lg text-foreground/90 hover:bg-white/[0.05] transition">
           <Menu className="h-4 w-4" />
         </button>
       </div>
@@ -212,17 +177,14 @@ function CollegeServer() {
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Back to communities
         </button>
-        <div className="flex-1 min-h-0">{Sidebar}</div>
+        <div className="flex-1 min-h-0 mt-3">{Sidebar}</div>
       </aside>
 
       {/* MOBILE SIDEBAR (drawer) */}
       {navOpen && (
         <>
-          <div
-            className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
-            onClick={() => setNavOpen(false)}
-          />
-          <aside className="md:hidden fixed inset-y-0 left-0 w-[280px] z-50 border-r border-white/[0.06]">
+          <div className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setNavOpen(false)} />
+          <aside className="md:hidden fixed inset-y-0 left-0 w-[280px] z-50 border-r border-white/[0.06] bg-background">
             {Sidebar}
           </aside>
         </>
@@ -241,10 +203,10 @@ function CollegeServer() {
           <h2 className="text-[13px] font-semibold">{activeChannel}</h2>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5 md:py-6 space-y-3">
+        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5 md:py-6 flex flex-col-reverse space-y-reverse space-y-3">
           {reviews.length === 0 ? (
-            <div className="glass-card rounded-2xl p-10 text-center">
-              <div className="text-[15px] font-medium text-foreground">No posts yet</div>
+            <div className="bg-white/[0.02] border border-white/[0.04] rounded-2xl p-10 text-center my-auto">
+              <div className="text-[15px] font-medium text-foreground">No posts yet in #{activeChannel}</div>
               <div className="text-[13px] text-muted-foreground mt-1">
                 Be the first verified student to share the truth.
               </div>
@@ -254,9 +216,9 @@ function CollegeServer() {
           )}
         </div>
 
-        {/* Composer */}
+        {/* Composer - Read-Only for Anonymous/Unverified */}
         <div className="px-4 md:px-6 pb-4 md:pb-6">
-          <div className="glass-card rounded-2xl p-3 flex items-end gap-2">
+          <div className="bg-white/[0.02] border border-white/[0.04] rounded-2xl p-3 flex items-end gap-2 focus-within:border-white/10 transition-colors">
             <textarea
               value={composer}
               onChange={(e) => setComposer(e.target.value)}
@@ -264,7 +226,9 @@ function CollegeServer() {
               placeholder={
                 verified
                   ? `Share your real take on #${activeChannel}…`
-                  : "You can browse anonymously — sign in with college email to post."
+                  : user 
+                    ? "Your college verification is pending."
+                    : "You are browsing anonymously. Sign in to post."
               }
               disabled={!verified}
               className="flex-1 bg-transparent outline-none resize-none text-[14px] py-2 px-2 placeholder:text-muted-foreground/70 disabled:cursor-not-allowed"
@@ -272,7 +236,7 @@ function CollegeServer() {
             <button
               onClick={post}
               disabled={!verified || !composer.trim()}
-              className="h-9 w-9 grid place-items-center rounded-lg bg-primary text-primary-foreground disabled:opacity-30 hover:opacity-90 transition"
+              className="h-9 w-9 grid place-items-center rounded-lg bg-white/10 text-white disabled:opacity-30 hover:bg-white/20 transition"
             >
               <Send className="h-4 w-4" />
             </button>
@@ -285,46 +249,28 @@ function CollegeServer() {
 
 function PostCard({ review }: { review: Review }) {
   return (
-    <article className="glass-card hover-lift rounded-2xl p-5">
+    <article className="bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.03] transition-colors rounded-2xl p-5">
       <header className="flex items-center gap-3">
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-white/25 to-white/5 border border-white/10 grid place-items-center text-[11px] font-medium">
+        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-white/20 to-white/5 border border-white/10 grid place-items-center text-[11px] font-medium">
           A
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-medium">anonymous student</div>
-          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-            <Badge>{review.branch ?? "Branch"}</Badge>
-            <Badge>{review.year ?? "Year"}</Badge>
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+            <span className="px-1.5 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.06]">{review.branch ?? "Branch"}</span>
+            <span className="px-1.5 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.06]">{review.year ?? "Year"}</span>
             <span>· {new Date(review.created_at).toLocaleDateString()}</span>
           </div>
         </div>
       </header>
-      <p className="mt-3 text-[14px] leading-relaxed text-foreground/95 whitespace-pre-wrap">
+      <p className="mt-3 text-[14px] leading-relaxed text-foreground/90 whitespace-pre-wrap">
         {review.content}
       </p>
       <footer className="mt-4 flex items-center gap-1 text-muted-foreground">
-        <Reaction icon={<Heart className="h-3.5 w-3.5" />} label="Like" />
-        <Reaction icon={<MessageCircle className="h-3.5 w-3.5" />} label="Reply" />
-        <Reaction icon={<Bookmark className="h-3.5 w-3.5" />} label="Save" />
-        <Reaction icon={<Share2 className="h-3.5 w-3.5" />} label="Share" />
+        <button className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-md hover:bg-white/[0.05] hover:text-foreground transition"><Heart className="h-3.5 w-3.5" /> Like</button>
+        <button className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-md hover:bg-white/[0.05] hover:text-foreground transition"><MessageCircle className="h-3.5 w-3.5" /> Reply</button>
+        <button className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-md hover:bg-white/[0.05] hover:text-foreground transition"><Bookmark className="h-3.5 w-3.5" /> Save</button>
       </footer>
     </article>
-  );
-}
-
-function Reaction({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <button className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-md hover:bg-white/[0.04] hover:text-foreground transition">
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-function Badge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="px-1.5 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.06] text-foreground/80 text-[10px]">
-      {children}
-    </span>
   );
 }
