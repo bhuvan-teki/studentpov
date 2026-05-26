@@ -14,7 +14,142 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      colleges: {
+        Row: {
+          created_at: string
+          description: string | null
+          email_domain: string | null
+          id: string
+          live_active_students: number
+          logo_url: string | null
+          name: string
+          slug: string
+          total_verified_students: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          email_domain?: string | null
+          id?: string
+          live_active_students?: number
+          logo_url?: string | null
+          name: string
+          slug: string
+          total_verified_students?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          email_domain?: string | null
+          id?: string
+          live_active_students?: number
+          logo_url?: string | null
+          name?: string
+          slug?: string
+          total_verified_students?: number
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          college_id: string | null
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          verification_status: string
+        }
+        Insert: {
+          college_id?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id: string
+          verification_status?: string
+        }
+        Update: {
+          college_id?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          verification_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reviews: {
+        Row: {
+          branch: string | null
+          channel: string
+          college_id: string
+          content: string
+          created_at: string
+          id: string
+          user_id: string
+          year: string | null
+        }
+        Insert: {
+          branch?: string | null
+          channel: string
+          college_id: string
+          content: string
+          created_at?: string
+          id?: string
+          user_id: string
+          year?: string | null
+        }
+        Update: {
+          branch?: string | null
+          channel?: string
+          college_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+          year?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      verification_documents: {
+        Row: {
+          created_at: string
+          file_url: string
+          id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_url: string
+          id?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          file_url?: string
+          id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
