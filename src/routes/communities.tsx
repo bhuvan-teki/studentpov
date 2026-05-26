@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Search, Users, Activity, LogOut } from "lucide-react";
+import { Users, Activity, LogOut, ArrowRight, GraduationCap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { TopNav } from "@/components/TopNav";
 import { useAuth } from "@/lib/auth";
@@ -28,7 +28,6 @@ export const Route = createFileRoute("/communities")({
 });
 
 function CommunitiesPage() {
-  const [q, setQ] = useState("");
   const [colleges, setColleges] = useState<College[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
@@ -45,10 +44,6 @@ function CommunitiesPage() {
       });
   }, []);
 
-  const filtered = colleges.filter((c) =>
-    c.name.toLowerCase().includes(q.toLowerCase()),
-  );
-
   const signOut = async () => {
     await supabase.auth.signOut();
     navigate({ to: "/login" });
@@ -57,17 +52,6 @@ function CommunitiesPage() {
   return (
     <main className="min-h-screen">
       <TopNav
-        centerSlot={
-          <div className="relative w-full max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search colleges..."
-              className="glass-input w-full rounded-full pl-9 pr-4 py-2 text-sm"
-            />
-          </div>
-        }
         rightSlot={
           <div className="flex items-center gap-2">
             {user ? (
@@ -95,7 +79,7 @@ function CommunitiesPage() {
         }
       />
 
-      <section className="mx-auto max-w-7xl px-6 py-10 md:py-14">
+      <section className="mx-auto max-w-4xl px-4 sm:px-6 py-10 md:py-16">
         <div className="mb-10">
           <h1 className="text-[28px] md:text-[36px] font-semibold tracking-tight text-gradient">
             College communities
@@ -106,57 +90,53 @@ function CommunitiesPage() {
         </div>
 
         {loading ? (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div
-                key={i}
-                className="glass-card rounded-2xl h-[200px] animate-pulse opacity-40"
-              />
-            ))}
+          <div className="glass-card rounded-2xl h-[160px] animate-pulse opacity-40" />
+        ) : colleges.length === 0 ? (
+          <div className="glass-card rounded-2xl p-10 text-center text-sm text-muted-foreground">
+            No college communities yet.
           </div>
         ) : (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((c) => (
+          <div className="flex flex-col gap-5">
+            {colleges.map((c) => (
               <Link
                 key={c.id}
                 to="/college/$slug"
                 params={{ slug: c.slug }}
-                className="glass-card hover-lift rounded-2xl p-6 flex flex-col gap-5 group"
+                className="glass-card hover-lift rounded-2xl p-5 sm:p-7 group flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-6"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <h3 className="text-[16px] font-semibold text-foreground tracking-tight truncate">
-                      {c.name}
-                    </h3>
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/80 mt-1">
-                      Verified student community
+                <div className="flex-1 min-w-0 order-2 sm:order-1">
+                  <h3 className="text-[18px] sm:text-[20px] font-semibold text-foreground tracking-tight">
+                    {c.name}
+                  </h3>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/80 mt-1">
+                    Verified student community
+                  </p>
+                  {c.description && (
+                    <p className="text-[13px] text-muted-foreground/90 mt-3 line-clamp-2">
+                      {c.description}
                     </p>
-                  </div>
-                  <div className="h-11 w-11 shrink-0 rounded-xl bg-gradient-to-br from-white/15 to-white/5 border border-white/10 grid place-items-center text-sm font-semibold text-foreground/90">
-                    {c.name
-                      .split(" ")
-                      .slice(0, 2)
-                      .map((s) => s[0])
-                      .join("")}
+                  )}
+
+                  <div className="mt-5 flex items-center gap-6">
+                    <Stat
+                      icon={<Users className="h-3.5 w-3.5" />}
+                      label="Verified students"
+                      value={c.total_verified_students.toLocaleString("en-IN")}
+                    />
+                    <Stat
+                      icon={<Activity className="h-3.5 w-3.5" />}
+                      label="Live active"
+                      value={c.live_active_students.toLocaleString("en-IN")}
+                      live={c.live_active_students > 0}
+                    />
                   </div>
                 </div>
 
-                <p className="text-[13px] text-muted-foreground/90 line-clamp-2">
-                  {c.description}
-                </p>
-
-                <div className="mt-auto pt-4 border-t border-white/[0.05] flex items-center justify-between">
-                  <Stat
-                    icon={<Users className="h-3.5 w-3.5" />}
-                    label="Verified"
-                    value={c.total_verified_students.toLocaleString("en-IN")}
-                  />
-                  <Stat
-                    icon={<Activity className="h-3.5 w-3.5" />}
-                    label="Live now"
-                    value={c.live_active_students.toLocaleString("en-IN")}
-                    live
-                  />
+                <div className="order-1 sm:order-2 flex items-center justify-between sm:justify-end gap-3 sm:gap-5 sm:shrink-0">
+                  <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-gradient-to-br from-white/15 to-white/[0.02] border border-white/10 grid place-items-center text-foreground/90">
+                    <GraduationCap className="h-6 w-6 sm:h-7 sm:w-7" />
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition" />
                 </div>
               </Link>
             ))}
