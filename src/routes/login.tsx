@@ -29,8 +29,16 @@ function LoginPage() {
   const [accept, setAccept] = useState(false);
 
   const sendOtp = async () => {
-    if (!email.includes("@")) {
+    const normalized = email.trim().toLowerCase();
+    if (!normalized.includes("@")) {
       toast.error("Enter a valid college email");
+      return;
+    }
+    if (!normalized.endsWith("@chaitanya.edu.in")) {
+      toast.error(
+        "Only Chaitanya Deemed to be University emails are supported in this MVP. Upload college proof if you do not have access to your college email.",
+        { duration: 7000 },
+      );
       return;
     }
     if (!accept) {
@@ -39,7 +47,7 @@ function LoginPage() {
     }
     setLoading(true);
     const { error } = await supabase.auth.signInWithOtp({
-      email,
+      email: normalized,
       options: { shouldCreateUser: true, emailRedirectTo: window.location.origin },
     });
     setLoading(false);
@@ -47,7 +55,7 @@ function LoginPage() {
       toast.error(error.message);
       return;
     }
-    toast.success("Verification code sent to " + email);
+    toast.success("Verification code sent to " + normalized);
     setStep("otp");
   };
 
