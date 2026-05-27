@@ -151,6 +151,7 @@ export function ChatRoom({ collegeId }: { collegeId: string }) {
                     <span className="text-[14px] font-semibold text-foreground">
                       {name}
                     </span>
+
                     <span className="text-[11px] text-muted-foreground">
                       {new Date(msg.created_at).toLocaleString("en-IN", {
                         day: "2-digit",
@@ -181,7 +182,7 @@ export function ChatRoom({ collegeId }: { collegeId: string }) {
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Message #general-chat"
+            placeholder="Message #general-chat..."
             className="flex-1 bg-transparent outline-none text-[14px] placeholder:text-muted-foreground/60"
           />
 
