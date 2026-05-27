@@ -35,7 +35,7 @@ function CommunitiesPage() {
     fetchColleges();
   }, []);
 
-  // Realtime Presence Tracker
+  // Updated Realtime Presence Engine with Debugging
   useEffect(() => {
     const room = supabase.channel('studentpov-live');
 
@@ -43,43 +43,41 @@ function CommunitiesPage() {
       .on('presence', { event: 'sync' }, () => {
         const activeUsers = room.presenceState();
         const currentLiveCounts: Record<string, number> = {};
-
-        for (const presenceId in activeUsers) {
-          const userList = activeUsers[presenceId] as any[];
-          userList.forEach((onlineUser) => {
-            if (onlineUser.college_id) {
-              currentLiveCounts[onlineUser.college_id] = (currentLiveCounts[onlineUser.college_id] || 0) + 1;
-            }
-          });
-        }
+        
+        Object.values(activeUsers).flat().forEach((onlineUser: any) => {
+          if (onlineUser.college_id) {
+            currentLiveCounts[onlineUser.college_id] = (currentLiveCounts[onlineUser.college_id] || 0) + 1;
+          }
+        });
         setLiveCounts(currentLiveCounts);
       })
       .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          // Check if user is logged in
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('college_id, verification_status')
-              .eq('id', user.id)
-              .maybeSingle();
+        console.log("Presence subscription status:", status); // CHECK THIS IN CONSOLE
+        
+        if (status === 'SUBSCRIBED' && user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('college_id, verification_status')
+            .eq('id', user.id)
+            .maybeSingle();
 
-            // If verified, track them as online for their college
-            if (profile && profile.verification_status === 'verified' && profile.college_id) {
-              await room.track({
-                college_id: profile.college_id,
-                online_at: new Date().toISOString(),
-              });
-            }
+          console.log("Presence profile check:", profile); // CHECK IF STATUS IS VERIFIED
+
+          if (profile?.verification_status === 'verified' && profile?.college_id) {
+            const trackStatus = await room.track({
+              college_id: profile.college_id,
+              online_at: new Date().toISOString(),
+            });
+            console.log("Presence track status:", trackStatus); // SHOULD BE 'ok'
+            room.sync();
+          } else {
+            console.warn("Presence skipped: User not verified or missing college_id");
           }
         }
       });
 
-    return () => {
-      supabase.removeChannel(room);
-    };
-  }, []);
+    return () => { supabase.removeChannel(room); };
+  }, [user]);
 
   return (
     <main className="min-h-screen bg-background text-foreground flex justify-center">
