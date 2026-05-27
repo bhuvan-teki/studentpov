@@ -286,45 +286,55 @@ function CollegeServer() {
           <h2 className="text-[13px] font-semibold">{activeChannel}</h2>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5 md:py-6 flex flex-col-reverse space-y-reverse space-y-3">
-          {reviews.length === 0 ? (
-            <div className="glass-card rounded-2xl p-10 text-center my-auto">
-              <div className="text-[15px] font-medium text-foreground">No posts yet in #{activeChannel}</div>
-              <div className="text-[13px] text-muted-foreground mt-1">
-                Be the first verified student to share the truth.
+        {activeChannel === "general-chat" ? (
+          /* Render the Live Chat Component ONLY for the general-chat channel */
+          <div className="flex-1 min-h-0 flex flex-col">
+            <ChatRoom collegeId={college.id} />
+          </div>
+        ) : (
+          /* Render the standard threaded Posts & Composer for all other channels */
+          <>
+            <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5 md:py-6 flex flex-col-reverse space-y-reverse space-y-3">
+              {reviews.length === 0 ? (
+                <div className="glass-card rounded-2xl p-10 text-center my-auto">
+                  <div className="text-[15px] font-medium text-foreground">No posts yet in #{activeChannel}</div>
+                  <div className="text-[13px] text-muted-foreground mt-1">
+                    Be the first verified student to share the truth.
+                  </div>
+                </div>
+              ) : (
+                reviews.map((r) => <PostCard key={r.id} review={r} />)
+              )}
+            </div>
+
+            {/* Composer - Read-Only for Anonymous/Unverified */}
+            <div className="px-4 md:px-6 pb-4 md:pb-6">
+              <div className="glass-card rounded-2xl p-3 flex items-end gap-2 focus-within:border-white/10 transition-colors">
+                <textarea
+                  value={composer}
+                  onChange={(e) => setComposer(e.target.value)}
+                  rows={1}
+                  placeholder={
+                    verified
+                      ? `Share your real take on #${activeChannel}…`
+                      : user 
+                        ? "Your college verification is pending."
+                        : "You can browse anonymously — sign in with college email to post."
+                  }
+                  disabled={!verified}
+                  className="flex-1 bg-transparent outline-none resize-none text-[14px] py-2 px-2 placeholder:text-muted-foreground/70 disabled:cursor-not-allowed"
+                />
+                <button
+                  onClick={post}
+                  disabled={!verified || !composer.trim()}
+                  className="h-9 w-9 grid place-items-center rounded-lg bg-primary text-primary-foreground disabled:opacity-30 hover:opacity-90 transition"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
               </div>
             </div>
-          ) : (
-            reviews.map((r) => <PostCard key={r.id} review={r} />)
-          )}
-        </div>
-
-        {/* Composer - Read-Only for Anonymous/Unverified */}
-        <div className="px-4 md:px-6 pb-4 md:pb-6">
-          <div className="glass-card rounded-2xl p-3 flex items-end gap-2 focus-within:border-white/10 transition-colors">
-            <textarea
-              value={composer}
-              onChange={(e) => setComposer(e.target.value)}
-              rows={1}
-              placeholder={
-                verified
-                  ? `Share your real take on #${activeChannel}…`
-                  : user 
-                    ? "Your college verification is pending."
-                    : "You can browse anonymously — sign in with college email to post."
-              }
-              disabled={!verified}
-              className="flex-1 bg-transparent outline-none resize-none text-[14px] py-2 px-2 placeholder:text-muted-foreground/70 disabled:cursor-not-allowed"
-            />
-            <button
-              onClick={post}
-              disabled={!verified || !composer.trim()}
-              className="h-9 w-9 grid place-items-center rounded-lg bg-primary text-primary-foreground disabled:opacity-30 hover:opacity-90 transition"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+          </>
+        )}
       </main>
     </div>
   );
