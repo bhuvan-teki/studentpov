@@ -37,7 +37,7 @@ function CommunitiesPage() {
   return (
     <main className="min-h-screen bg-background text-foreground flex justify-center">
       {/* max-w-5xl keeps it wide but prevents it from becoming too massive on large screens */}
-      <section className="w-full max-w-5xl px-4 sm:px-6 md:px-8 pt-16 md:pt-24 pb-12">
+      <section className="mx-auto w-full max-w-[1400px] px-6 md:px-12 py-10 md:py-16">
         <div className="mb-8 max-w-2xl">
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
             College communities
