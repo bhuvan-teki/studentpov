@@ -12,7 +12,6 @@ type College = {
   description: string | null;
   total_verified_students: number;
   live_active_students: number;
-  created_at?: string;
 };
 
 export const Route = createFileRoute("/communities")({
@@ -28,11 +27,6 @@ export const Route = createFileRoute("/communities")({
   component: CommunitiesPage,
 });
 
-const getAnonymousName = (email?: string) => {
-  if (!email) return "Anonymous Student";
-  return "Anonymous Student";
-};
-
 function CommunitiesPage() {
   const [colleges, setColleges] = useState<College[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,50 +34,19 @@ function CommunitiesPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchColleges = async () => {
-      const { data, error } = await supabase
-        .from("colleges")
-        .select("*")
-        .order("total_verified_students", { ascending: false });
-
-      if (error) {
-        console.error(error);
-      } else {
-        setColleges(data as College[]);
-      }
-
-      setLoading(false);
-    };
-
-    fetchColleges();
-
-    const channel = supabase
-      .channel("college-updates")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "colleges",
-        },
-        () => {
-          fetchColleges();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    supabase
+      .from("colleges")
+      .select("id,name,slug,description,total_verified_students,live_active_students")
+      .order("total_verified_students", { ascending: false })
+      .then(({ data }) => {
+        setColleges(data ?? []);
+        setLoading(false);
+      });
   }, []);
 
   const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-      navigate({ to: "/login" });
-    } catch (err) {
-      console.error(err);
-    }
+    await supabase.auth.signOut();
+    navigate({ to: "/login" });
   };
 
   return (
@@ -94,7 +57,7 @@ function CommunitiesPage() {
             {user ? (
               <>
                 <div className="h-8 w-8 rounded-full bg-gradient-to-br from-white/30 to-white/5 border border-white/10 grid place-items-center text-[11px] font-medium text-foreground/90">
-                  {getAnonymousName(user.email).charAt(0)}
+                  {(user.email?.[0] ?? "U").toUpperCase()}
                 </div>
                 <button
                   onClick={signOut}
@@ -130,7 +93,7 @@ function CommunitiesPage() {
           <div className="glass-card rounded-2xl h-[160px] animate-pulse opacity-40" />
         ) : colleges.length === 0 ? (
           <div className="glass-card rounded-2xl p-10 text-center text-sm text-muted-foreground">
-            No verified college communities available yet.
+            No college communities yet.
           </div>
         ) : (
           <div className="flex flex-col gap-5">
@@ -164,7 +127,7 @@ function CommunitiesPage() {
                       icon={<Activity className="h-3.5 w-3.5" />}
                       label="Live active"
                       value={c.live_active_students.toLocaleString("en-IN")}
-                      live={false}
+                      live={c.live_active_students > 0}
                     />
                   </div>
                 </div>
@@ -173,7 +136,7 @@ function CommunitiesPage() {
                   <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-gradient-to-br from-white/15 to-white/[0.02] border border-white/10 grid place-items-center text-foreground/90">
                     <GraduationCap className="h-6 w-6 sm:h-7 sm:w-7" />
                   </div>
-                  <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition hidden sm:block" />
+                  <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition" />
                 </div>
               </Link>
             ))}
