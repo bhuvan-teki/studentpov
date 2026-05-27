@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import {
   Hash, Heart, MessageCircle, Bookmark, Share2, Send, ArrowLeft, Menu, X,
 } from "lucide-react";
@@ -108,10 +109,8 @@ function CollegeServer() {
         (payload) => {
           const newReview = payload.new as Review;
           
-          // Only push to UI if they are currently looking at the channel it was sent in
           if (newReview.channel === activeChannel) {
             setReviews((current) => {
-              // Prevent duplication from your own local optimistic updates
               if (current.some((r) => r.id === newReview.id)) return current;
               return [newReview, ...current];
             });
@@ -120,26 +119,34 @@ function CollegeServer() {
       )
       .subscribe();
 
-    // Cleanup subscription on unmount or channel change
     return () => {
       supabase.removeChannel(channelSubscription);
     };
   }, [college, activeChannel]);
 
-  // Check Verification Status
+  // SECURE: Check Verification Status AND Correct College Match
   useEffect(() => {
-    if (!user) { setVerified(false); return; }
+    if (!user || !college) { 
+      setVerified(false); 
+      return; 
+    }
+    
     supabase
       .from("profiles")
-      .select("verification_status")
+      .select("verification_status, college_id")
       .eq("id", user.id)
       .maybeSingle()
-      .then(({ data }) => setVerified(data?.verification_status === "verified"));
-  }, [user]);
+      .then(({ data }) => {
+        setVerified(
+          data?.verification_status === "verified" && 
+          data?.college_id === college.id
+        );
+      });
+  }, [user, college]);
 
   const post = async () => {
     if (!user) { toast.error("Sign in to post"); return; }
-    if (!verified) { toast.error("Only verified students can post"); return; }
+    if (!verified) { toast.error("Only verified students of this college can post"); return; }
     if (composer.trim().length < 2) return;
     if (!college) return;
     
@@ -158,7 +165,6 @@ function CollegeServer() {
       
     if (error) { toast.error(error.message); return; }
     
-    // Optimistic UI Update - pops up instantly for the sender
     setReviews((r) => [data as Review, ...r]);
     setComposer("");
   };
@@ -287,12 +293,10 @@ function CollegeServer() {
         </div>
 
         {activeChannel === "general-chat" ? (
-          /* Render the Live Chat Component ONLY for the general-chat channel */
           <div className="flex-1 min-h-0 flex flex-col">
             <ChatRoom collegeId={college.id} />
           </div>
         ) : (
-          /* Render the standard threaded Posts & Composer for all other channels */
           <>
             <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5 md:py-6 flex flex-col-reverse space-y-reverse space-y-3">
               {reviews.length === 0 ? (
@@ -307,7 +311,6 @@ function CollegeServer() {
               )}
             </div>
 
-            {/* Composer - Read-Only for Anonymous/Unverified */}
             <div className="px-4 md:px-6 pb-4 md:pb-6">
               <div className="glass-card rounded-2xl p-3 flex items-end gap-2 focus-within:border-white/10 transition-colors">
                 <textarea
@@ -318,7 +321,7 @@ function CollegeServer() {
                     verified
                       ? `Share your real take on #${activeChannel}…`
                       : user 
-                        ? "Your college verification is pending."
+                        ? "Your college verification is pending, or you belong to a different college."
                         : "You can browse anonymously — sign in with college email to post."
                   }
                   disabled={!verified}
@@ -369,7 +372,7 @@ function PostCard({ review }: { review: Review }) {
   );
 }
 
-function Reaction({ icon, label }: { icon: React.ReactNode; label: string }) {
+function Reaction({ icon, label }: { icon: ReactNode; label: string }) {
   return (
     <button className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-md hover:bg-white/[0.04] hover:text-foreground transition">
       {icon}
@@ -378,7 +381,7 @@ function Reaction({ icon, label }: { icon: React.ReactNode; label: string }) {
   );
 }
 
-function Badge({ children }: { children: React.ReactNode }) {
+function Badge({ children }: { children: ReactNode }) {
   return (
     <span className="px-1.5 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.06] text-foreground/80 text-[10px]">
       {children}
