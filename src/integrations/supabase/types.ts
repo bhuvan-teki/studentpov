@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      channels: {
+        Row: {
+          category: string
+          college_id: string
+          created_at: string
+          id: string
+          name: string
+          position: number
+          slug: string
+        }
+        Insert: {
+          category: string
+          college_id: string
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          slug: string
+        }
+        Update: {
+          category?: string
+          college_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          slug?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channels_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       colleges: {
         Row: {
           created_at: string
@@ -50,6 +88,59 @@ export type Database = {
         }
         Relationships: []
       }
+      posts: {
+        Row: {
+          branch: string | null
+          channel_slug: string
+          college_id: string
+          content: string
+          created_at: string
+          id: string
+          location: string | null
+          media_type: string | null
+          media_url: string | null
+          user_id: string
+          voice_url: string | null
+          year: string | null
+        }
+        Insert: {
+          branch?: string | null
+          channel_slug: string
+          college_id: string
+          content: string
+          created_at?: string
+          id?: string
+          location?: string | null
+          media_type?: string | null
+          media_url?: string | null
+          user_id: string
+          voice_url?: string | null
+          year?: string | null
+        }
+        Update: {
+          branch?: string | null
+          channel_slug?: string
+          college_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          location?: string | null
+          media_type?: string | null
+          media_url?: string | null
+          user_id?: string
+          voice_url?: string | null
+          year?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posts_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           college_id: string | null
@@ -81,6 +172,38 @@ export type Database = {
             columns: ["college_id"]
             isOneToOne: false
             referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reports: {
+        Row: {
+          created_at: string
+          id: string
+          post_id: string
+          reason: string | null
+          reporter_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          post_id: string
+          reason?: string | null
+          reporter_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          post_id?: string
+          reason?: string | null
+          reporter_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
             referencedColumns: ["id"]
           },
         ]
