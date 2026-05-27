@@ -26,10 +26,8 @@ function CommunitiesPage() {
         .from("colleges")
         .select("*")
         .order("total_verified_students", { ascending: false });
-      
-      if (!error && data) {
-        setColleges(data as College[]);
-      }
+
+      if (!error && data) setColleges(data as College[]);
       setLoading(false);
     };
 
@@ -37,53 +35,78 @@ function CommunitiesPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-6 md:p-12">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Verified Communities</h1>
-          <p className="text-muted-foreground mt-2">Select your college to join the anonymous discussion.</p>
+    <main className="min-h-screen bg-background text-foreground">
+      <section className="w-full px-6 sm:px-10 lg:px-16 xl:px-20 pt-24 md:pt-32">
+        <div className="mb-12 max-w-3xl">
+          <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">
+            College communities
+          </h1>
+          <p className="mt-5 text-base md:text-lg text-muted-foreground">
+            Pick a campus. Read the unfiltered truth from verified students inside.
+          </p>
         </div>
 
         {loading ? (
-          <div className="text-muted-foreground text-sm">Loading communities...</div>
+          <div className="h-36 w-full rounded-3xl bg-white/[0.03] border border-white/[0.06] animate-pulse" />
+        ) : colleges.length === 0 ? (
+          <div className="rounded-3xl bg-white/[0.02] border border-white/[0.06] p-10 text-sm text-muted-foreground">
+            No verified college communities available yet.
+          </div>
         ) : (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-5 w-full">
             {colleges.map((college) => (
               <Link
                 key={college.id}
                 to="/college/$slug"
                 params={{ slug: college.slug }}
-                className="group relative flex flex-col md:flex-row md:items-center gap-4 p-5 rounded-2xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] hover:border-white/[0.08] transition-all overflow-hidden"
+                className="group relative w-full min-h-[150px] flex items-center gap-6 rounded-3xl bg-white/[0.025] border border-white/[0.06] px-7 md:px-9 py-7 hover:bg-white/[0.045] hover:border-white/[0.1] transition-all duration-300 overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.35)]"
               >
-                <div className="h-16 w-16 shrink-0 rounded-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 grid place-items-center">
-                  <Building2 className="h-7 w-7 text-white/50" />
+                <div className="h-20 w-20 shrink-0 rounded-2xl bg-gradient-to-br from-white/12 to-white/[0.03] border border-white/10 grid place-items-center">
+                  <Building2 className="h-9 w-9 text-white/55" />
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-lg font-semibold truncate group-hover:text-white transition-colors">
+                  <h2 className="text-xl md:text-2xl font-semibold tracking-tight truncate">
                     {college.name}
                   </h2>
-                  <p className="text-sm text-muted-foreground line-clamp-1 mt-1">
-                    {college.description || "Join the discussion for verified students."}
+                  <p className="mt-2 text-sm md:text-base text-muted-foreground line-clamp-1">
+                    {college.description || "Verified student community for real college experiences."}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-6 text-sm text-muted-foreground mt-2 md:mt-0">
+                <div className="hidden md:flex items-center gap-8 text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    <span className="text-base tabular-nums text-foreground/85">
+                      {college.total_verified_students.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-green-500/80" />
+                    <span className="text-base tabular-nums text-green-500/90">
+                      {college.live_active_students.toLocaleString("en-IN")} active
+                    </span>
+                  </div>
+
+                  <ChevronRight className="h-6 w-6 opacity-40 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                </div>
+
+                <div className="md:hidden flex flex-col items-end gap-2 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1.5">
                     <Users className="h-4 w-4" />
-                    <span>{college.total_verified_students.toLocaleString()}</span>
+                    <span>{college.total_verified_students.toLocaleString("en-IN")}</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Activity className="h-4 w-4 text-green-500/70" />
-                    <span className="text-green-500/70">{college.live_active_students.toLocaleString()} active</span>
+                  <div className="flex items-center gap-1.5 text-green-500/80">
+                    <Activity className="h-4 w-4" />
+                    <span>{college.live_active_students.toLocaleString("en-IN")} active</span>
                   </div>
-                  <ChevronRight className="h-5 w-5 opacity-30 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                 </div>
               </Link>
             ))}
           </div>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
