@@ -35,7 +35,7 @@ function CommunitiesPage() {
     fetchColleges();
   }, []);
 
-  // Updated Realtime Presence Engine with Debugging
+  // Realtime Presence Tracker
   useEffect(() => {
     const room = supabase.channel('studentpov-live');
 
@@ -43,7 +43,7 @@ function CommunitiesPage() {
       .on('presence', { event: 'sync' }, () => {
         const activeUsers = room.presenceState();
         const currentLiveCounts: Record<string, number> = {};
-        
+
         Object.values(activeUsers).flat().forEach((onlineUser: any) => {
           if (onlineUser.college_id) {
             currentLiveCounts[onlineUser.college_id] = (currentLiveCounts[onlineUser.college_id] || 0) + 1;
@@ -52,32 +52,33 @@ function CommunitiesPage() {
         setLiveCounts(currentLiveCounts);
       })
       .subscribe(async (status) => {
-        console.log("Presence subscription status:", status); // CHECK THIS IN CONSOLE
-        
-        if (status === 'SUBSCRIBED' && user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('college_id, verification_status')
-            .eq('id', user.id)
-            .maybeSingle();
+        if (status === 'SUBSCRIBED') {
+          // FIX: Fetch the user directly from Supabase so we never get a "ReferenceError"
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
 
-          console.log("Presence profile check:", profile); // CHECK IF STATUS IS VERIFIED
+          if (currentUser) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('college_id, verification_status')
+              .eq('id', currentUser.id)
+              .maybeSingle();
 
-          if (profile?.verification_status === 'verified' && profile?.college_id) {
-            const trackStatus = await room.track({
-              college_id: profile.college_id,
-              online_at: new Date().toISOString(),
-            });
-            console.log("Presence track status:", trackStatus); // SHOULD BE 'ok'
-            room.sync();
-          } else {
-            console.warn("Presence skipped: User not verified or missing college_id");
+            if (profile?.verification_status === 'verified' && profile?.college_id) {
+              await room.track({
+                college_id: profile.college_id,
+                online_at: new Date().toISOString(),
+              });
+              // Force sync so the green dot updates instantly
+              room.sync();
+            }
           }
         }
       });
 
-    return () => { supabase.removeChannel(room); };
-  }, [user]);
+    return () => {
+      supabase.removeChannel(room);
+    };
+  }, []);
 
   return (
     <main className="min-h-screen bg-background text-foreground flex justify-center">
