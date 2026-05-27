@@ -20,6 +20,7 @@ function CommunitiesPage() {
   const [colleges, setColleges] = useState<College[]>([]);
   const [loading, setLoading] = useState(true);
   const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
+  const [totalLiveUsers, setTotalLiveUsers] = useState(0);
 
   useEffect(() => {
     const fetchColleges = async () => {
@@ -35,50 +36,48 @@ function CommunitiesPage() {
     fetchColleges();
   }, []);
 
-  // Realtime Presence Tracker
+  // Universal Realtime Presence Tracker
   useEffect(() => {
-    const room = supabase.channel('studentpov-live');
+    const sessionId = crypto.randomUUID();
+
+    const room = supabase.channel("public-website-visitors", {
+      config: {
+        presence: {
+          key: sessionId,
+        },
+      },
+    });
 
     room
-      .on('presence', { event: 'sync' }, () => {
-        const activeUsers = room.presenceState();
-        const currentLiveCounts: Record<string, number> = {};
+      .on("presence", { event: "sync" }, () => {
+        const state = room.presenceState();
+        const total = Object.keys(state).length;
 
-        Object.values(activeUsers).flat().forEach((onlineUser: any) => {
-          if (onlineUser.college_id) {
-            currentLiveCounts[onlineUser.college_id] = (currentLiveCounts[onlineUser.college_id] || 0) + 1;
-          }
+        setTotalLiveUsers(total);
+
+        const updatedLiveCounts: Record<string, number> = {};
+
+        colleges.forEach((college) => {
+          updatedLiveCounts[college.id] = total;
         });
-        setLiveCounts(currentLiveCounts);
+
+        setLiveCounts(updatedLiveCounts);
+
+        console.log("Total live visitors:", total);
       })
       .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          // FIX: Fetch the user directly from Supabase so we never get a "ReferenceError"
-          const { data: { user: currentUser } } = await supabase.auth.getUser();
-
-          if (currentUser) {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('college_id, verification_status')
-              .eq('id', currentUser.id)
-              .maybeSingle();
-
-            if (profile?.verification_status === 'verified' && profile?.college_id) {
-              await room.track({
-                college_id: profile.college_id,
-                online_at: new Date().toISOString(),
-              });
-              // Force sync so the green dot updates instantly
-              room.sync();
-            }
-          }
+        if (status === "SUBSCRIBED") {
+          await room.track({
+            session_id: sessionId,
+            online_at: new Date().toISOString(),
+          });
         }
       });
 
     return () => {
       supabase.removeChannel(room);
     };
-  }, []);
+  }, [colleges]);
 
   return (
     <main className="min-h-screen bg-background text-foreground flex justify-center">
