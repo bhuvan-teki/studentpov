@@ -61,6 +61,7 @@ function CollegeServer() {
   const [loading, setLoading] = useState(true);
   const [navOpen, setNavOpen] = useState(false);
 
+  // Fetch College Details
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -74,18 +75,57 @@ function CollegeServer() {
     return () => { alive = false; };
   }, [slug, navigate]);
 
+  // REAL-TIME POST FETCHING
   useEffect(() => {
     if (!college) return;
-    supabase
-      .from("reviews")
-      .select("*")
-      .eq("college_id", college.id)
-      .eq("channel", activeChannel)
-      .order("created_at", { ascending: false })
-      .limit(50)
-      .then(({ data }) => setReviews((data ?? []) as Review[]));
+
+    // 1. Initial Data Fetch
+    const fetchReviews = async () => {
+      const { data } = await supabase
+        .from("reviews")
+        .select("*")
+        .eq("college_id", college.id)
+        .eq("channel", activeChannel)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      setReviews((data ?? []) as Review[]);
+    };
+
+    fetchReviews();
+
+    // 2. Real-Time WebSocket Subscription
+    const channelSubscription = supabase
+      .channel(`public:reviews:${college.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "reviews",
+          filter: `college_id=eq.${college.id}`,
+        },
+        (payload) => {
+          const newReview = payload.new as Review;
+          
+          // Only push to UI if they are currently looking at the channel it was sent in
+          if (newReview.channel === activeChannel) {
+            setReviews((current) => {
+              // Prevent duplication from your own local optimistic updates
+              if (current.some((r) => r.id === newReview.id)) return current;
+              return [newReview, ...current];
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription on unmount or channel change
+    return () => {
+      supabase.removeChannel(channelSubscription);
+    };
   }, [college, activeChannel]);
 
+  // Check Verification Status
   useEffect(() => {
     if (!user) { setVerified(false); return; }
     supabase
@@ -101,6 +141,7 @@ function CollegeServer() {
     if (!verified) { toast.error("Only verified students can post"); return; }
     if (composer.trim().length < 2) return;
     if (!college) return;
+    
     const { data, error } = await supabase
       .from("reviews")
       .insert({
@@ -113,7 +154,10 @@ function CollegeServer() {
       })
       .select()
       .single();
+      
     if (error) { toast.error(error.message); return; }
+    
+    // Optimistic UI Update - pops up instantly for the sender
     setReviews((r) => [data as Review, ...r]);
     setComposer("");
   };
