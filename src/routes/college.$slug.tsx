@@ -1,45 +1,43 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Hash, ArrowLeft, Menu, X, Send, Image as ImageIcon, Video, Paperclip,
-  MapPin, Flag, Trash2, Play, Pause, FileText, Loader2,
+  Hash, Heart, MessageCircle, Bookmark, Share2, Send, ArrowLeft, Menu, X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
-import { detectMediaKind, uploadMedia, type MediaKind } from "@/lib/media";
-import { VoiceRecorder } from "@/components/VoiceRecorder";
 
 type College = {
   id: string;
   name: string;
   slug: string;
   description: string | null;
+  total_verified_students: number;
+  live_active_students: number;
 };
 
-type Channel = {
-  id: string;
-  category: string;
-  name: string;
-  slug: string;
-  position: number;
-};
-
-type Post = {
+type Review = {
   id: string;
   user_id: string;
-  channel_slug: string;
+  channel: string;
   content: string;
   branch: string | null;
   year: string | null;
-  media_url: string | null;
-  media_type: string | null;
-  voice_url: string | null;
-  location: string | null;
   created_at: string;
 };
 
-const LOCATION_OPTIONS = ["", "Main Campus", "Boys Hostel", "Girls Hostel", "Library", "Hyderabad"];
+const CHANNEL_GROUPS: { label: string; channels: string[] }[] = [
+  { label: "Start Here", channels: ["welcome", "ask-seniors", "college-overview"] },
+  { label: "Admissions", channels: ["admission-process", "fee-structure", "hidden-costs", "management-quota"] },
+  { label: "Placements", channels: ["placement-reality", "internship-opportunities", "highest-packages", "placement-scams"] },
+  { label: "Academics", channels: ["faculty-reviews", "attendance-pressure", "exam-difficulty", "lab-facilities"] },
+  { label: "Campus Life", channels: ["hostel-life", "food-quality", "campus-environment", "strictness"] },
+  { label: "Warnings & Truth", channels: ["reality-check", "expectations-vs-reality", "scams-and-fines", "mental-pressure"] },
+  { label: "Branches", channels: ["cse", "ai-ml", "ece", "mechanical", "mba"] },
+  { label: "Guidance", channels: ["roadmap-guidance", "internships", "gate-preparation", "higher-studies"] },
+  { label: "Media", channels: ["placement-proof", "campus-photos", "hostel-photos"] },
+  { label: "Free Talk", channels: ["general-chat", "memes", "random"] },
+];
 
 export const Route = createFileRoute("/college/$slug")({
   head: ({ params }) => ({
@@ -56,14 +54,10 @@ function CollegeServer() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [college, setCollege] = useState<College | null>(null);
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [activeChannel, setActiveChannel] = useState<string>("welcome");
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [activeChannel, setActiveChannel] = useState("welcome");
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [verified, setVerified] = useState(false);
-  const [profile, setProfile] = useState<{ branch: string; year: string }>({
-    branch: "CSE",
-    year: "2nd Year",
-  });
+  const [composer, setComposer] = useState("");
   const [loading, setLoading] = useState(true);
   const [navOpen, setNavOpen] = useState(false);
 
@@ -75,12 +69,6 @@ function CollegeServer() {
       if (!alive) return;
       if (!c) { navigate({ to: "/communities" }); return; }
       setCollege(c as College);
-      const { data: ch } = await supabase
-        .from("channels").select("*").eq("college_id", (c as College).id).order("position");
-      if (!alive) return;
-      const list = (ch ?? []) as Channel[];
-      setChannels(list);
-      if (list.length) setActiveChannel(list[0].slug);
       setLoading(false);
     })();
     return () => { alive = false; };
@@ -89,41 +77,13 @@ function CollegeServer() {
   useEffect(() => {
     if (!college) return;
     supabase
-      .from("posts")
+      .from("reviews")
       .select("*")
       .eq("college_id", college.id)
-      .eq("channel_slug", activeChannel)
+      .eq("channel", activeChannel)
       .order("created_at", { ascending: false })
-      .limit(100)
-      .then(({ data }) => setPosts((data ?? []) as Post[]));
-
-    const channel = supabase
-      .channel(`posts:${college.id}:${activeChannel}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "posts",
-          filter: `channel_slug=eq.${activeChannel}`,
-        },
-        (payload) => {
-          const np = payload.new as Post;
-          if (np.channel_slug === activeChannel) {
-            setPosts((p) => (p.some((x) => x.id === np.id) ? p : [np, ...p]));
-          }
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "posts" },
-        (payload) => {
-          const id = (payload.old as { id: string }).id;
-          setPosts((p) => p.filter((x) => x.id !== id));
-        },
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      .limit(50)
+      .then(({ data }) => setReviews((data ?? []) as Review[]));
   }, [college, activeChannel]);
 
   useEffect(() => {
@@ -136,14 +96,27 @@ function CollegeServer() {
       .then(({ data }) => setVerified(data?.verification_status === "verified"));
   }, [user]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, Channel[]>();
-    for (const c of channels) {
-      if (!map.has(c.category)) map.set(c.category, []);
-      map.get(c.category)!.push(c);
-    }
-    return Array.from(map.entries());
-  }, [channels]);
+  const post = async () => {
+    if (!user) { toast.error("Sign in to post"); return; }
+    if (!verified) { toast.error("Only verified students can post"); return; }
+    if (composer.trim().length < 2) return;
+    if (!college) return;
+    const { data, error } = await supabase
+      .from("reviews")
+      .insert({
+        user_id: user.id,
+        college_id: college.id,
+        channel: activeChannel,
+        content: composer.trim(),
+        branch: "Anonymous",
+        year: "Student",
+      })
+      .select()
+      .single();
+    if (error) { toast.error(error.message); return; }
+    setReviews((r) => [data as Review, ...r]);
+    setComposer("");
+  };
 
   const initials = useMemo(
     () => college?.name.split(" ").slice(0, 2).map((s) => s[0]).join("") ?? "",
@@ -179,18 +152,18 @@ function CollegeServer() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-3 space-y-5">
-        {grouped.map(([cat, list]) => (
-          <div key={cat}>
+        {CHANNEL_GROUPS.map((g) => (
+          <div key={g.label}>
             <div className="px-2 mb-1.5 text-[10px] uppercase tracking-[0.16em] text-muted-foreground/60">
-              {cat}
+              {g.label}
             </div>
             <div>
-              {list.map((ch) => {
-                const active = ch.slug === activeChannel;
+              {g.channels.map((ch) => {
+                const active = ch === activeChannel;
                 return (
                   <button
-                    key={ch.id}
-                    onClick={() => selectChannel(ch.slug)}
+                    key={ch}
+                    onClick={() => selectChannel(ch)}
                     className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition ${
                       active
                         ? "bg-white/[0.06] text-foreground"
@@ -198,7 +171,7 @@ function CollegeServer() {
                     }`}
                   >
                     <Hash className="h-3.5 w-3.5 opacity-70" />
-                    <span className="truncate">{ch.slug}</span>
+                    <span className="truncate">{ch}</span>
                   </button>
                 );
               })}
@@ -211,6 +184,7 @@ function CollegeServer() {
 
   return (
     <div className="h-screen flex flex-col md:flex-row bg-background text-foreground overflow-hidden">
+      {/* Mobile top bar */}
       <div className="md:hidden h-14 shrink-0 px-3 border-b border-white/[0.04] flex items-center gap-2 bg-black/40 backdrop-blur">
         <button
           onClick={() => navigate({ to: "/communities" })}
@@ -230,6 +204,7 @@ function CollegeServer() {
         </button>
       </div>
 
+      {/* DESKTOP SIDEBAR */}
       <aside className="hidden md:flex w-[260px] shrink-0 border-r border-white/[0.04] flex-col">
         <button
           onClick={() => navigate({ to: "/communities" })}
@@ -240,6 +215,7 @@ function CollegeServer() {
         <div className="flex-1 min-h-0 mt-3">{Sidebar}</div>
       </aside>
 
+      {/* MOBILE SIDEBAR (drawer) */}
       {navOpen && (
         <>
           <div
@@ -252,6 +228,7 @@ function CollegeServer() {
         </>
       )}
 
+      {/* CENTER FEED */}
       <main className="flex-1 flex flex-col min-w-0">
         <div className="hidden md:flex h-14 px-6 border-b border-white/[0.04] items-center gap-3">
           <Hash className="h-4 w-4 text-muted-foreground" />
@@ -265,7 +242,7 @@ function CollegeServer() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5 md:py-6 flex flex-col-reverse space-y-reverse space-y-3">
-          {posts.length === 0 ? (
+          {reviews.length === 0 ? (
             <div className="glass-card rounded-2xl p-10 text-center my-auto">
               <div className="text-[15px] font-medium text-foreground">No posts yet in #{activeChannel}</div>
               <div className="text-[13px] text-muted-foreground mt-1">
@@ -273,385 +250,76 @@ function CollegeServer() {
               </div>
             </div>
           ) : (
-            posts.map((p) => (
-              <PostCard
-                key={p.id}
-                post={p}
-                currentUserId={user?.id}
-                onDelete={(id) => setPosts((prev) => prev.filter((x) => x.id !== id))}
-              />
-            ))
+            reviews.map((r) => <PostCard key={r.id} review={r} />)
           )}
         </div>
 
-        <Composer
-          collegeId={college.id}
-          channelSlug={activeChannel}
-          verified={verified}
-          userId={user?.id}
-          profile={profile}
-          setProfile={setProfile}
-          onPosted={(p) => setPosts((prev) => (prev.some((x) => x.id === p.id) ? prev : [p, ...prev]))}
-        />
+        {/* Composer - Read-Only for Anonymous/Unverified */}
+        <div className="px-4 md:px-6 pb-4 md:pb-6">
+          <div className="glass-card rounded-2xl p-3 flex items-end gap-2 focus-within:border-white/10 transition-colors">
+            <textarea
+              value={composer}
+              onChange={(e) => setComposer(e.target.value)}
+              rows={1}
+              placeholder={
+                verified
+                  ? `Share your real take on #${activeChannel}…`
+                  : user 
+                    ? "Your college verification is pending."
+                    : "You can browse anonymously — sign in with college email to post."
+              }
+              disabled={!verified}
+              className="flex-1 bg-transparent outline-none resize-none text-[14px] py-2 px-2 placeholder:text-muted-foreground/70 disabled:cursor-not-allowed"
+            />
+            <button
+              onClick={post}
+              disabled={!verified || !composer.trim()}
+              className="h-9 w-9 grid place-items-center rounded-lg bg-primary text-primary-foreground disabled:opacity-30 hover:opacity-90 transition"
+            >
+              <Send className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       </main>
     </div>
   );
 }
 
-function Composer({
-  collegeId,
-  channelSlug,
-  verified,
-  userId,
-  profile,
-  setProfile,
-  onPosted,
-}: {
-  collegeId: string;
-  channelSlug: string;
-  verified: boolean;
-  userId: string | undefined;
-  profile: { branch: string; year: string };
-  setProfile: (p: { branch: string; year: string }) => void;
-  onPosted: (p: Post) => void;
-}) {
-  const [text, setText] = useState("");
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
-  const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null);
-  const [location, setLocation] = useState("");
-  const [posting, setPosting] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const docRef = useRef<HTMLInputElement>(null);
-
-  const pickMedia = (accept: string) => {
-    if (fileRef.current) {
-      fileRef.current.accept = accept;
-      fileRef.current.click();
-    }
-  };
-
-  const reset = () => {
-    setText("");
-    setMediaFile(null);
-    setVoiceBlob(null);
-    setLocation("");
-  };
-
-  const submit = async () => {
-    if (!userId) { toast.error("Sign in to post"); return; }
-    if (!verified) { toast.error("Only verified students can post"); return; }
-    if (!text.trim() && !mediaFile && !voiceBlob) return;
-    setPosting(true);
-    try {
-      let media_url: string | null = null;
-      let media_type: MediaKind | null = null;
-      let voice_url: string | null = null;
-      if (mediaFile) {
-        media_type = detectMediaKind(mediaFile);
-        media_url = await uploadMedia({ userId, file: mediaFile, kind: media_type });
-      }
-      if (voiceBlob) {
-        voice_url = await uploadMedia({ userId, file: voiceBlob, kind: "voice", ext: "webm" });
-      }
-      const { data, error } = await supabase
-        .from("posts")
-        .insert({
-          user_id: userId,
-          college_id: collegeId,
-          channel_slug: channelSlug,
-          content: text.trim(),
-          branch: profile.branch || null,
-          year: profile.year || null,
-          media_url,
-          media_type,
-          voice_url,
-          location: location || null,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      onPosted(data as Post);
-      reset();
-    } catch (e) {
-      toast.error((e as Error).message || "Failed to post");
-    } finally {
-      setPosting(false);
-    }
-  };
-
-  if (!verified) {
-    return (
-      <div className="px-4 md:px-6 pb-4 md:pb-6">
-        <div className="glass-card rounded-2xl p-4 text-center text-[13px] text-muted-foreground">
-          {userId
-            ? "Your college verification is pending — you can read freely."
-            : "You're browsing anonymously. Sign in with a college email to post."}
-        </div>
-      </div>
-    );
-  }
-
+function PostCard({ review }: { review: Review }) {
   return (
-    <div className="px-4 md:px-6 pb-4 md:pb-6">
-      <div className="glass-card rounded-2xl p-3 space-y-3 focus-within:border-white/10 transition-colors">
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <select
-            value={profile.branch}
-            onChange={(e) => setProfile({ ...profile, branch: e.target.value })}
-            className="bg-white/[0.04] border border-white/[0.06] rounded-md px-2 py-1 text-foreground/85"
-          >
-            {["CSE","AI-ML","ECE","EEE","Mechanical","Civil","MBA","Other"].map((b)=>(
-              <option key={b} value={b} className="bg-background">{b}</option>
-            ))}
-          </select>
-          <select
-            value={profile.year}
-            onChange={(e) => setProfile({ ...profile, year: e.target.value })}
-            className="bg-white/[0.04] border border-white/[0.06] rounded-md px-2 py-1 text-foreground/85"
-          >
-            {["1st Year","2nd Year","3rd Year","4th Year","Alumni"].map((y)=>(
-              <option key={y} value={y} className="bg-background">{y}</option>
-            ))}
-          </select>
-          <span className="text-muted-foreground/60">· posted anonymously</span>
-        </div>
-
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={2}
-          placeholder={`Share your real take on #${channelSlug}…`}
-          className="w-full bg-transparent outline-none resize-none text-[14px] py-1 placeholder:text-muted-foreground/70"
-        />
-
-        {(mediaFile || voiceBlob || location) && (
-          <div className="flex flex-wrap gap-2 text-[11px]">
-            {mediaFile && (
-              <Chip onClear={() => setMediaFile(null)}>
-                {detectMediaKind(mediaFile)} · {mediaFile.name.slice(0, 24)}
-              </Chip>
-            )}
-            {voiceBlob && <Chip onClear={() => setVoiceBlob(null)}>voice attached</Chip>}
-            {location && <Chip onClear={() => setLocation("")}>📍 {location}</Chip>}
-          </div>
-        )}
-
-        <input
-          ref={fileRef}
-          type="file"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) setMediaFile(f);
-            e.target.value = "";
-          }}
-        />
-        <input
-          ref={docRef}
-          type="file"
-          accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) setMediaFile(f);
-            e.target.value = "";
-          }}
-        />
-
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <IconBtn onClick={() => pickMedia("image/*")} label="Image"><ImageIcon className="h-3.5 w-3.5" /></IconBtn>
-            <IconBtn onClick={() => pickMedia("video/*")} label="Video"><Video className="h-3.5 w-3.5" /></IconBtn>
-            <IconBtn onClick={() => docRef.current?.click()} label="Doc"><Paperclip className="h-3.5 w-3.5" /></IconBtn>
-            <VoiceRecorder
-              hasClip={!!voiceBlob}
-              onRecorded={setVoiceBlob}
-              onClear={() => setVoiceBlob(null)}
-            />
-            <div className="flex items-center gap-1 ml-1">
-              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-              <select
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                className="bg-white/[0.03] border border-white/[0.06] rounded-md px-2 py-1 text-[11px] text-foreground/80"
-              >
-                {LOCATION_OPTIONS.map((l) => (
-                  <option key={l} value={l} className="bg-background">{l || "No location"}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <button
-            onClick={submit}
-            disabled={posting || (!text.trim() && !mediaFile && !voiceBlob)}
-            className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium disabled:opacity-30 hover:opacity-90 transition flex items-center gap-2"
-          >
-            {posting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-            Post
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function IconBtn({ onClick, label, children }: { onClick: () => void; label: string; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      className="h-8 px-2.5 rounded-md bg-white/[0.03] border border-white/[0.06] text-foreground/80 hover:bg-white/[0.06] flex items-center gap-1.5 text-[11px] transition"
-    >
-      {children}
-      <span className="hidden sm:inline">{label}</span>
-    </button>
-  );
-}
-
-function Chip({ children, onClear }: { children: React.ReactNode; onClear: () => void }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.05] border border-white/[0.06] text-foreground/85">
-      {children}
-      <button onClick={onClear} className="text-muted-foreground hover:text-foreground">
-        <X className="h-3 w-3" />
-      </button>
-    </span>
-  );
-}
-
-function PostCard({
-  post,
-  currentUserId,
-  onDelete,
-}: {
-  post: Post;
-  currentUserId: string | undefined;
-  onDelete: (id: string) => void;
-}) {
-  const isOwner = currentUserId && currentUserId === post.user_id;
-
-  const report = async () => {
-    if (!currentUserId) { toast.error("Sign in to report"); return; }
-    const { error } = await supabase
-      .from("reports")
-      .insert({ post_id: post.id, reporter_id: currentUserId, reason: "user_reported" });
-    if (error) toast.error(error.message);
-    else toast.success("Reported — thank you. Our team will review.");
-  };
-
-  const remove = async () => {
-    if (!confirm("Delete this post?")) return;
-    const { error } = await supabase.from("posts").delete().eq("id", post.id);
-    if (error) toast.error(error.message);
-    else onDelete(post.id);
-  };
-
-  return (
-    <article className="glass-card rounded-2xl p-5">
-      <header className="flex items-start gap-3">
+    <article className="glass-card hover-lift rounded-2xl p-5">
+      <header className="flex items-center gap-3">
         <div className="h-8 w-8 rounded-full bg-gradient-to-br from-white/25 to-white/5 border border-white/10 grid place-items-center text-[11px] font-medium">
           A
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-medium">Anonymous {post.branch ?? ""} Student</div>
-          <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
-            {post.year && <Badge>{post.year}</Badge>}
-            {post.branch && <Badge>{post.branch}</Badge>}
-            <span>· {new Date(post.created_at).toLocaleString()}</span>
+          <div className="text-[13px] font-medium">anonymous student</div>
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+            <Badge>{review.branch ?? "Branch"}</Badge>
+            <Badge>{review.year ?? "Year"}</Badge>
+            <span>· {new Date(review.created_at).toLocaleDateString()}</span>
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={report}
-            title="Report"
-            className="h-7 w-7 grid place-items-center rounded-md text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition"
-          >
-            <Flag className="h-3.5 w-3.5" />
-          </button>
-          {isOwner && (
-            <button
-              onClick={remove}
-              title="Delete"
-              className="h-7 w-7 grid place-items-center rounded-md text-muted-foreground hover:text-red-400 hover:bg-white/[0.04] transition"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
       </header>
-
-      {post.content && (
-        <p className="mt-3 text-[14px] leading-relaxed text-foreground/95 whitespace-pre-wrap">
-          {post.content}
-        </p>
-      )}
-
-      {post.media_url && post.media_type === "image" && (
-        <img
-          src={post.media_url}
-          alt=""
-          loading="lazy"
-          className="mt-3 rounded-xl border border-white/[0.06] max-h-[480px] object-cover w-full"
-        />
-      )}
-      {post.media_url && post.media_type === "video" && (
-        <video
-          src={post.media_url}
-          controls
-          className="mt-3 rounded-xl border border-white/[0.06] max-h-[480px] w-full bg-black"
-        />
-      )}
-      {post.media_url && post.media_type === "document" && (
-        <a
-          href={post.media_url}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.06] text-[12px] text-foreground/90"
-        >
-          <FileText className="h-3.5 w-3.5" /> Open attachment
-        </a>
-      )}
-
-      {post.voice_url && <VoicePlayer url={post.voice_url} />}
-
-      {post.location && (
-        <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <MapPin className="h-3 w-3" /> {post.location}
-        </div>
-      )}
+      <p className="mt-3 text-[14px] leading-relaxed text-foreground/95 whitespace-pre-wrap">
+        {review.content}
+      </p>
+      <footer className="mt-4 flex items-center gap-1 text-muted-foreground">
+        <Reaction icon={<Heart className="h-3.5 w-3.5" />} label="Like" />
+        <Reaction icon={<MessageCircle className="h-3.5 w-3.5" />} label="Reply" />
+        <Reaction icon={<Bookmark className="h-3.5 w-3.5" />} label="Save" />
+        <Reaction icon={<Share2 className="h-3.5 w-3.5" />} label="Share" />
+      </footer>
     </article>
   );
 }
 
-function VoicePlayer({ url }: { url: string }) {
-  const ref = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
-
-  const toggle = () => {
-    const a = ref.current;
-    if (!a) return;
-    if (playing) { a.pause(); } else { a.play(); }
-  };
-
+function Reaction({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <div className="mt-3 inline-flex items-center gap-3 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-      <button
-        onClick={toggle}
-        className="h-7 w-7 grid place-items-center rounded-full bg-white text-black hover:opacity-90 transition"
-      >
-        {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
-      </button>
-      <span className="text-[11px] text-muted-foreground">Voice message</span>
-      <audio
-        ref={ref}
-        src={url}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
-        className="hidden"
-      />
-    </div>
+    <button className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-md hover:bg-white/[0.04] hover:text-foreground transition">
+      {icon}
+      {label}
+    </button>
   );
 }
 
