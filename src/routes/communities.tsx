@@ -19,6 +19,7 @@ export const Route = createFileRoute("/communities")({
 function CommunitiesPage() {
   const [colleges, setColleges] = useState<College[]>([]);
   const [loading, setLoading] = useState(true);
+  const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const fetchColleges = async () => {
@@ -32,6 +33,52 @@ function CommunitiesPage() {
     };
 
     fetchColleges();
+  }, []);
+
+  // Realtime Presence Tracker
+  useEffect(() => {
+    const room = supabase.channel('studentpov-live');
+
+    room
+      .on('presence', { event: 'sync' }, () => {
+        const activeUsers = room.presenceState();
+        const currentLiveCounts: Record<string, number> = {};
+
+        for (const presenceId in activeUsers) {
+          const userList = activeUsers[presenceId] as any[];
+          userList.forEach((onlineUser) => {
+            if (onlineUser.college_id) {
+              currentLiveCounts[onlineUser.college_id] = (currentLiveCounts[onlineUser.college_id] || 0) + 1;
+            }
+          });
+        }
+        setLiveCounts(currentLiveCounts);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          // Check if user is logged in
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('college_id, verification_status')
+              .eq('id', user.id)
+              .maybeSingle();
+
+            // If verified, track them as online for their college
+            if (profile && profile.verification_status === 'verified' && profile.college_id) {
+              await room.track({
+                college_id: profile.college_id,
+                online_at: new Date().toISOString(),
+              });
+            }
+          }
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(room);
+    };
   }, []);
 
   return (
@@ -86,11 +133,15 @@ function CommunitiesPage() {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <Activity className="h-4 w-4 text-green-500/80" />
-                    <span className="text-sm tabular-nums text-green-500/90">
-                      {college.live_active_students.toLocaleString("en-IN")} active
+                  <div className={`flex items-center gap-1.5 ${(liveCounts[college.id] || 0) > 0 ? "text-green-500" : "text-muted-foreground/50"}`}>
+                    <Activity className="h-4 w-4" />
+                    <span className="text-sm tabular-nums">
+                      {liveCounts[college.id] || 0} active
                     </span>
+                    {/* Pulsing dot only shows if someone is actually online */}
+                    {(liveCounts[college.id] || 0) > 0 && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                    )}
                   </div>
 
                   <ChevronRight className="h-5 w-5 opacity-40 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
@@ -102,9 +153,9 @@ function CommunitiesPage() {
                     <Users className="h-3.5 w-3.5" />
                     <span>{college.total_verified_students.toLocaleString("en-IN")}</span>
                   </div>
-                  <div className="flex items-center gap-1 text-green-500/80">
+                  <div className={`flex items-center gap-1 ${(liveCounts[college.id] || 0) > 0 ? "text-green-500" : "text-muted-foreground/50"}`}>
                     <Activity className="h-3.5 w-3.5" />
-                    <span>{college.live_active_students.toLocaleString("en-IN")}</span>
+                    <span>{liveCounts[college.id] || 0}</span>
                   </div>
                 </div>
               </Link>
