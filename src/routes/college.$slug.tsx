@@ -1,21 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
-import {
-  Hash,
-  Heart,
-  MessageCircle,
-  Bookmark,
-  Share2,
-  Send,
-  ArrowLeft,
-  Menu,
-  X,
-  Loader2,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Hash, Send, ArrowLeft, Menu, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
+import { ChatRoom } from "@/components/ChatRoom";
 
 type College = {
   id: string;
@@ -34,18 +23,6 @@ type Review = {
   branch: string | null;
   year: string | null;
   created_at: string;
-};
-
-type Message = {
-  id: string;
-  content: string;
-  created_at: string;
-  profile_id: string;
-  college_id: string;
-  profiles?: {
-    display_name?: string | null;
-    email?: string | null;
-  } | null;
 };
 
 const CHANNEL_GROUPS: { label: string; channels: string[] }[] = [
@@ -75,7 +52,6 @@ function CollegeServer() {
   const { slug } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-
   const [college, setCollege] = useState<College | null>(null);
   const [activeChannel, setActiveChannel] = useState("welcome");
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -84,55 +60,41 @@ function CollegeServer() {
   const [loading, setLoading] = useState(true);
   const [navOpen, setNavOpen] = useState(false);
 
+  // Fetch College Details
   useEffect(() => {
     let alive = true;
-
-    const fetchCollege = async () => {
-      const { data, error } = await supabase
-        .from("colleges")
-        .select("*")
-        .eq("slug", slug)
-        .maybeSingle();
-
+    (async () => {
+      const { data: c } = await supabase
+        .from("colleges").select("*").eq("slug", slug).maybeSingle();
       if (!alive) return;
-
-      if (error || !data) {
-        navigate({ to: "/communities" });
-        return;
-      }
-
-      setCollege(data as College);
+      if (!c) { navigate({ to: "/communities" }); return; }
+      setCollege(c as College);
       setLoading(false);
-    };
-
-    fetchCollege();
-
-    return () => {
-      alive = false;
-    };
+    })();
+    return () => { alive = false; };
   }, [slug, navigate]);
 
+  // REAL-TIME POST FETCHING
   useEffect(() => {
     if (!college) return;
 
+    // 1. Initial Data Fetch
     const fetchReviews = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("reviews")
         .select("*")
         .eq("college_id", college.id)
         .eq("channel", activeChannel)
         .order("created_at", { ascending: false })
         .limit(50);
-
-      if (!error && data) {
-        setReviews(data as Review[]);
-      }
+      setReviews((data ?? []) as Review[]);
     };
 
     fetchReviews();
 
-    const reviewChannel = supabase
-      .channel(`reviews-${college.id}-${activeChannel}`)
+    // 2. Real-Time WebSocket Subscription
+    const channelSubscription = supabase
+      .channel(`public:reviews:${college.id}`)
       .on(
         "postgres_changes",
         {
@@ -143,28 +105,29 @@ function CollegeServer() {
         },
         (payload) => {
           const newReview = payload.new as Review;
-
-          if (newReview.channel !== activeChannel) return;
-
-          setReviews((current) => {
-            if (current.some((r) => r.id === newReview.id)) return current;
-            return [newReview, ...current];
-          });
+          
+          if (newReview.channel === activeChannel) {
+            setReviews((current) => {
+              if (current.some((r) => r.id === newReview.id)) return current;
+              return [newReview, ...current];
+            });
+          }
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(reviewChannel);
+      supabase.removeChannel(channelSubscription);
     };
   }, [college, activeChannel]);
 
+  // SECURE: Check Verification Status AND Correct College Match
   useEffect(() => {
-    if (!user || !college) {
-      setVerified(false);
-      return;
+    if (!user || !college) { 
+      setVerified(false); 
+      return; 
     }
-
+    
     supabase
       .from("profiles")
       .select("verification_status, college_id")
@@ -172,26 +135,18 @@ function CollegeServer() {
       .maybeSingle()
       .then(({ data }) => {
         setVerified(
-          data?.verification_status === "verified" &&
-            data?.college_id === college.id
+          data?.verification_status === "verified" && 
+          data?.college_id === college.id
         );
       });
   }, [user, college]);
 
   const post = async () => {
-    if (!user) {
-      toast.error("Sign in to post");
-      return;
-    }
-
-    if (!verified) {
-      toast.error("Only verified students of this college can post");
-      return;
-    }
-
+    if (!user) { toast.error("Sign in to post"); return; }
+    if (!verified) { toast.error("Only verified students of this college can post"); return; }
     if (composer.trim().length < 2) return;
     if (!college) return;
-
+    
     const { data, error } = await supabase
       .from("reviews")
       .insert({
@@ -204,36 +159,20 @@ function CollegeServer() {
       })
       .select()
       .single();
-
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-
-    setReviews((current) => {
-      if (current.some((r) => r.id === data.id)) return current;
-      return [data as Review, ...current];
-    });
-
+      
+    if (error) { toast.error(error.message); return; }
+    
+    setReviews((r) => [data as Review, ...r]);
     setComposer("");
   };
 
   const initials = useMemo(
-    () =>
-      college?.name
-        .split(" ")
-        .slice(0, 2)
-        .map((s) => s[0])
-        .join("") ?? "",
-    [college]
+    () => college?.name.split(" ").slice(0, 2).map((s) => s[0]).join("") ?? "",
+    [college],
   );
 
   if (loading || !college) {
-    return (
-      <div className="min-h-screen grid place-items-center text-muted-foreground text-sm">
-        Loading community…
-      </div>
-    );
+    return <div className="min-h-screen grid place-items-center text-muted-foreground text-sm">Loading community…</div>;
   }
 
   const selectChannel = (ch: string) => {
@@ -247,14 +186,10 @@ function CollegeServer() {
         <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-white/20 to-white/5 border border-white/10 grid place-items-center text-[12px] font-semibold">
           {initials}
         </div>
-
         <div className="min-w-0 flex-1">
           <div className="text-[13px] font-semibold truncate">{college.name}</div>
-          <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">
-            Server
-          </div>
+          <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">Server</div>
         </div>
-
         <button
           onClick={() => setNavOpen(false)}
           className="md:hidden h-8 w-8 grid place-items-center text-muted-foreground hover:text-foreground"
@@ -270,11 +205,9 @@ function CollegeServer() {
             <div className="px-2 mb-1.5 text-[10px] uppercase tracking-[0.16em] text-muted-foreground/60">
               {g.label}
             </div>
-
             <div>
               {g.channels.map((ch) => {
                 const active = ch === activeChannel;
-
                 return (
                   <button
                     key={ch}
@@ -299,6 +232,7 @@ function CollegeServer() {
 
   return (
     <div className="h-screen flex flex-col md:flex-row bg-background text-foreground overflow-hidden">
+      {/* Mobile top bar */}
       <div className="md:hidden h-14 shrink-0 px-3 border-b border-white/[0.04] flex items-center gap-2 bg-black/40 backdrop-blur">
         <button
           onClick={() => navigate({ to: "/communities" })}
@@ -306,11 +240,9 @@ function CollegeServer() {
         >
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
-
         <div className="flex-1 min-w-0 text-center">
           <div className="text-[13px] font-semibold truncate">{college.name}</div>
         </div>
-
         <button
           onClick={() => setNavOpen(true)}
           className="h-9 w-9 grid place-items-center rounded-lg text-foreground/90 hover:bg-white/[0.05] transition"
@@ -320,6 +252,7 @@ function CollegeServer() {
         </button>
       </div>
 
+      {/* DESKTOP SIDEBAR */}
       <aside className="hidden md:flex w-[260px] shrink-0 border-r border-white/[0.04] flex-col">
         <button
           onClick={() => navigate({ to: "/communities" })}
@@ -327,30 +260,28 @@ function CollegeServer() {
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Back to communities
         </button>
-
         <div className="flex-1 min-h-0 mt-3">{Sidebar}</div>
       </aside>
 
+      {/* MOBILE SIDEBAR (drawer) */}
       {navOpen && (
         <>
           <div
             className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
             onClick={() => setNavOpen(false)}
           />
-
           <aside className="md:hidden fixed inset-y-0 left-0 w-[280px] z-50 border-r border-white/[0.06] bg-background">
             {Sidebar}
           </aside>
         </>
       )}
 
+      {/* CENTER FEED */}
       <main className="flex-1 flex flex-col min-w-0">
         <div className="hidden md:flex h-14 px-6 border-b border-white/[0.04] items-center gap-3">
           <Hash className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-[14px] font-semibold">{activeChannel}</h2>
-          <span className="text-[12px] text-muted-foreground/70">
-            · anonymous & verified
-          </span>
+          <span className="text-[12px] text-muted-foreground/70">· anonymous & verified</span>
         </div>
 
         <div className="md:hidden px-4 py-3 border-b border-white/[0.04] flex items-center gap-2">
@@ -360,46 +291,46 @@ function CollegeServer() {
 
         {activeChannel === "general-chat" ? (
           <div className="flex-1 min-h-0 flex flex-col">
-            <ChatRoom collegeId={college.id} verified={verified} />
+            <ChatRoom collegeId={college.id} />
           </div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5 md:py-6 flex flex-col-reverse space-y-reverse space-y-3">
+            <div className="flex-1 overflow-y-auto py-4 flex flex-col-reverse">
               {reviews.length === 0 ? (
-                <div className="glass-card rounded-2xl p-10 text-center my-auto">
-                  <div className="text-[15px] font-medium text-foreground">
-                    No posts yet in #{activeChannel}
-                  </div>
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                  <div className="text-[15px] font-medium text-foreground">No posts yet in #{activeChannel}</div>
                   <div className="text-[13px] text-muted-foreground mt-1">
                     Be the first verified student to share the truth.
                   </div>
                 </div>
               ) : (
-                reviews.map((r) => <PostCard key={r.id} review={r} />)
+                // Added a flex container to keep the flow correct with the new flat cards
+                <div className="flex flex-col gap-1">
+                  {reviews.map((r) => <PostCard key={r.id} review={r} />)}
+                </div>
               )}
             </div>
 
-            <div className="px-4 md:px-6 pb-4 md:pb-6">
-              <div className="glass-card rounded-2xl p-3 flex items-end gap-2 focus-within:border-white/10 transition-colors">
+            <div className="px-4 md:px-6 pb-4 md:pb-6 pt-2">
+              <div className="bg-white/[0.06] rounded-xl p-1.5 pl-4 flex items-center gap-2 focus-within:bg-white/[0.08] transition-colors border border-white/[0.08]">
                 <textarea
                   value={composer}
                   onChange={(e) => setComposer(e.target.value)}
                   rows={1}
                   placeholder={
                     verified
-                      ? `Share your real take on #${activeChannel}…`
-                      : user
+                      ? `Message #${activeChannel}…`
+                      : user 
                         ? "Your college verification is pending, or you belong to a different college."
                         : "You can browse anonymously — sign in with college email to post."
                   }
                   disabled={!verified}
-                  className="flex-1 bg-transparent outline-none resize-none text-[14px] py-2 px-2 placeholder:text-muted-foreground/70 disabled:cursor-not-allowed"
+                  className="flex-1 bg-transparent outline-none resize-none text-[15px] py-1.5 placeholder:text-muted-foreground/50 disabled:cursor-not-allowed"
                 />
-
                 <button
                   onClick={post}
                   disabled={!verified || !composer.trim()}
-                  className="h-9 w-9 grid place-items-center rounded-lg bg-primary text-primary-foreground disabled:opacity-30 hover:opacity-90 transition"
+                  className="h-9 w-9 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center text-primary disabled:opacity-30 hover:bg-primary/20 transition-colors"
                 >
                   <Send className="h-4 w-4" />
                 </button>
@@ -412,254 +343,33 @@ function CollegeServer() {
   );
 }
 
-function ChatRoom({
-  collegeId,
-  verified,
-}: {
-  collegeId: string;
-  verified: boolean;
-}) {
-  const { user } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState("");
-  const [loading, setLoading] = useState(true);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const fetchMessages = async () => {
-      const { data, error } = await supabase
-        .from("messages")
-        .select(`
-          id,
-          content,
-          created_at,
-          profile_id,
-          college_id,
-          profiles (
-            display_name,
-            email
-          )
-        `)
-        .eq("college_id", collegeId)
-        .order("created_at", { ascending: true })
-        .limit(100);
-
-      if (!error && data) {
-        setMessages(data as Message[]);
-      }
-
-      setLoading(false);
-    };
-
-    fetchMessages();
-
-    const chatChannel = supabase
-      .channel(`chat-${collegeId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `college_id=eq.${collegeId}`,
-        },
-        async (payload) => {
-          const newMsg = payload.new as Message;
-
-          setMessages((current) => {
-            if (current.some((m) => m.id === newMsg.id)) return current;
-            return [...current, newMsg];
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(chatChannel);
-    };
-  }, [collegeId]);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  const sendMessage = async (e: FormEvent) => {
-    e.preventDefault();
-
-    if (!user) {
-      toast.error("Sign in to chat");
-      return;
-    }
-
-    if (!verified) {
-      toast.error("Only verified students of this college can chat");
-      return;
-    }
-
-    if (!newMessage.trim()) return;
-
-    const content = newMessage.trim();
-    setNewMessage("");
-
-    const { error } = await supabase.from("messages").insert({
-      college_id: collegeId,
-      profile_id: user.id,
-      content,
-    });
-
-    if (error) {
-      toast.error(error.message);
-      setNewMessage(content);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 flex flex-col h-full bg-background relative">
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 scroll-smooth"
-      >
-        {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
-            <p className="text-sm">Welcome to the general chat!</p>
-            <p className="text-xs mt-1 opacity-70">Say hi to your campus.</p>
-          </div>
-        ) : (
-          messages.map((msg) => {
-            const isMe = msg.profile_id === user?.id;
-            const initial =
-              msg.profiles?.email?.[0]?.toUpperCase() ||
-              msg.profiles?.display_name?.[0]?.toUpperCase() ||
-              "A";
-
-            return (
-              <div
-                key={msg.id}
-                className={`flex items-end gap-2 ${
-                  isMe ? "justify-end" : "justify-start"
-                }`}
-              >
-                {!isMe && (
-                  <div className="h-7 w-7 rounded-full bg-gradient-to-br from-white/20 to-white/5 border border-white/10 flex items-center justify-center text-[10px] font-bold text-foreground/80 shrink-0 mb-1">
-                    {initial}
-                  </div>
-                )}
-
-                <div
-                  className={`flex flex-col ${
-                    isMe ? "items-end" : "items-start"
-                  } max-w-[75%]`}
-                >
-                  {!isMe && (
-                    <span className="text-[10px] text-muted-foreground/70 ml-1 mb-1">
-                      {msg.profiles?.display_name || "Anonymous"}
-                    </span>
-                  )}
-
-                  <div
-                    className={`px-4 py-2.5 rounded-2xl text-[14px] leading-relaxed break-words ${
-                      isMe
-                        ? "bg-primary text-primary-foreground rounded-br-sm"
-                        : "glass-card text-foreground rounded-bl-sm"
-                    }`}
-                  >
-                    {msg.content}
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      <div className="p-4 md:p-6 bg-background/80 backdrop-blur-md border-t border-white/[0.04]">
-        <form
-          onSubmit={sendMessage}
-          className="glass-card rounded-full p-1.5 pl-4 flex items-center gap-2 focus-within:border-white/10 transition-colors"
-        >
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder={
-              verified
-                ? "Message #general-chat..."
-                : user
-                  ? "Your college verification is pending, or you belong to a different college."
-                  : "You can browse anonymously — sign in with college email to chat."
-            }
-            disabled={!verified}
-            className="flex-1 bg-transparent outline-none text-[14px] placeholder:text-muted-foreground/60 disabled:cursor-not-allowed"
-          />
-
-          <button
-            type="submit"
-            disabled={!verified || !newMessage.trim()}
-            className="h-9 w-9 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground disabled:opacity-30 hover:opacity-90 transition-opacity"
-          >
-            <Send className="h-4 w-4" />
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 function PostCard({ review }: { review: Review }) {
   return (
-    <article className="glass-card hover-lift rounded-2xl p-5">
-      <header className="flex items-center gap-3">
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-white/25 to-white/5 border border-white/10 grid place-items-center text-[11px] font-medium">
-          A
+    <article className="group flex gap-3 px-4 md:px-6 py-2 hover:bg-white/[0.035] transition">
+      <div className="h-9 w-9 rounded-full bg-gradient-to-br from-white/20 to-white/5 border border-white/10 grid place-items-center text-[12px] font-semibold shrink-0 mt-0.5">
+        A
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="text-[15px] font-medium text-foreground hover:underline cursor-pointer">
+            anonymous student
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            {new Date(review.created_at).toLocaleString("en-IN", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
         </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-medium">anonymous student</div>
-          <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
-            <Badge>{review.branch ?? "Branch"}</Badge>
-            <Badge>{review.year ?? "Year"}</Badge>
-            <span>· {new Date(review.created_at).toLocaleDateString()}</span>
-          </div>
-        </div>
-      </header>
-
-      <p className="mt-3 text-[14px] leading-relaxed text-foreground/95 whitespace-pre-wrap">
-        {review.content}
-      </p>
-
-      <footer className="mt-4 flex items-center gap-1 text-muted-foreground">
-        <Reaction icon={<Heart className="h-3.5 w-3.5" />} label="Like" />
-        <Reaction icon={<MessageCircle className="h-3.5 w-3.5" />} label="Reply" />
-        <Reaction icon={<Bookmark className="h-3.5 w-3.5" />} label="Save" />
-        <Reaction icon={<Share2 className="h-3.5 w-3.5" />} label="Share" />
-      </footer>
+        <p className="mt-0.5 text-[15px] leading-[1.375rem] text-foreground/90 whitespace-pre-wrap break-words">
+          {review.content}
+        </p>
+      </div>
     </article>
-  );
-}
-
-function Reaction({ icon, label }: { icon: ReactNode; label: string }) {
-  return (
-    <button className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-md hover:bg-white/[0.04] hover:text-foreground transition">
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-function Badge({ children }: { children: ReactNode }) {
-  return (
-    <span className="px-1.5 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.06] text-foreground/80 text-[10px]">
-      {children}
-    </span>
   );
 }
