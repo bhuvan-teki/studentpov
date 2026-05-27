@@ -98,10 +98,9 @@ export function ChatRoom({ collegeId }: { collegeId: string }) {
   return (
     <div className="flex-1 flex flex-col h-full bg-background relative">
       {/* Chat Messages Area */}
-      {/* Removed the heavy space-y-4 to allow tighter grouping like Discord */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto py-4 scroll-smooth"
+        className="flex-1 overflow-y-auto py-4 scroll-smooth flex flex-col"
       >
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
@@ -109,11 +108,13 @@ export function ChatRoom({ collegeId }: { collegeId: string }) {
             <p className="text-xs mt-1 opacity-70">Say hi to your campus.</p>
           </div>
         ) : (
-          messages.map((msg) => {
+          messages.map((msg, index) => {
+            // MAGIC LOGIC: Check if this message was sent by the same person as the previous message
+            const isConsecutive = index > 0 && messages[index - 1].profile_id === msg.profile_id;
+            
             const initial = msg.profiles?.email?.[0].toUpperCase() || "A";
             const displayName = msg.profiles?.display_name || "anonymous student";
             
-            // Format time exactly like Discord (e.g., "2:14 AM")
             const timeString = new Date(msg.created_at).toLocaleTimeString([], { 
               hour: '2-digit', 
               minute: '2-digit' 
@@ -122,27 +123,38 @@ export function ChatRoom({ collegeId }: { collegeId: string }) {
             return (
               <div 
                 key={msg.id} 
-                className="group flex gap-4 px-4 md:px-6 py-1 hover:bg-white/[0.02] transition-colors mt-3"
+                // Tighter padding, and smaller top-margin if it's a consecutive message
+                className={`group flex px-4 md:px-6 py-0.5 hover:bg-white/[0.03] transition-colors ${isConsecutive ? "mt-0" : "mt-4"}`}
               >
-                {/* Avatar (Always on the left) */}
-                <div className="h-10 w-10 shrink-0 rounded-full bg-gradient-to-br from-white/20 to-white/5 border border-white/10 flex items-center justify-center text-sm font-semibold text-foreground/80 mt-0.5 cursor-pointer hover:opacity-80 transition-opacity">
-                  {initial}
+                {/* Fixed-width Left Column for Avatars / Hover Timestamps */}
+                <div className="w-10 shrink-0 mr-4 flex justify-center mt-0.5">
+                  {!isConsecutive ? (
+                    // Show Avatar for the first message
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-white/20 to-white/5 border border-white/10 flex items-center justify-center text-sm font-semibold text-foreground/80 cursor-pointer hover:opacity-80 transition-opacity">
+                      {initial}
+                    </div>
+                  ) : (
+                    // Show Timestamp on hover for consecutive messages (Exactly like Discord)
+                    <div className="opacity-0 group-hover:opacity-100 text-[10px] text-muted-foreground mt-1 cursor-default">
+                      {timeString.split(" ")[0]}
+                    </div>
+                  )}
                 </div>
                 
-                {/* Message Content Area */}
-                <div className="flex flex-col min-w-0">
-                  {/* Header: Name and Timestamp */}
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-[15px] font-medium text-foreground hover:underline cursor-pointer">
-                      {displayName}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {timeString}
-                    </span>
-                  </div>
+                {/* Right Column for Content */}
+                <div className="flex flex-col min-w-0 flex-1">
+                  {!isConsecutive && (
+                    <div className="flex items-baseline gap-2 mb-0.5">
+                      <span className="text-[15px] font-medium text-foreground hover:underline cursor-pointer">
+                        {displayName}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {timeString}
+                      </span>
+                    </div>
+                  )}
                   
-                  {/* The actual message (No bubble, just raw text) */}
-                  <div className="text-[15px] text-foreground/90 leading-relaxed whitespace-pre-wrap break-words mt-0.5">
+                  <div className="text-[15px] text-foreground/90 leading-[1.375rem] whitespace-pre-wrap break-words">
                     {msg.content}
                   </div>
                 </div>
@@ -152,23 +164,23 @@ export function ChatRoom({ collegeId }: { collegeId: string }) {
         )}
       </div>
 
-      {/* Chat Input Bar */}
-      <div className="p-4 md:p-6 bg-background/80 backdrop-blur-md border-t border-white/[0.04]">
+      {/* Flat Discord-Style Input Bar */}
+      <div className="px-4 md:px-6 pb-6 pt-2 bg-background">
         <form 
           onSubmit={sendMessage}
-          className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-2 pl-4 flex items-center gap-2 focus-within:border-white/20 transition-colors"
+          className="bg-white/[0.06] rounded-lg p-1.5 pl-4 flex items-center gap-2 focus-within:bg-white/[0.08] transition-colors"
         >
           <input
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Message #general-chat..."
-            className="flex-1 bg-transparent outline-none text-[15px] placeholder:text-muted-foreground/50"
+            placeholder="Message #general-chat"
+            className="flex-1 bg-transparent outline-none text-[15px] py-1.5 placeholder:text-muted-foreground/50"
           />
           <button
             type="submit"
             disabled={!newMessage.trim()}
-            className="h-9 w-9 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center text-primary disabled:opacity-30 hover:bg-primary/20 transition-colors"
+            className="h-8 w-8 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/[0.1] disabled:opacity-30 disabled:hover:bg-transparent transition-all"
           >
             <Send className="h-4 w-4" />
           </button>
