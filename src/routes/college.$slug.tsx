@@ -85,7 +85,7 @@ function CollegeServer() {
         .select("*")
         .eq("college_id", college.id)
         .eq("channel", activeChannel)
-        .order("created_at", { ascending: false })
+        .order("created_at", { ascending: true })
         .limit(50);
       setReviews((data ?? []) as Review[]);
     };
@@ -109,7 +109,7 @@ function CollegeServer() {
           if (newReview.channel === activeChannel) {
             setReviews((current) => {
               if (current.some((r) => r.id === newReview.id)) return current;
-              return [newReview, ...current];
+              return [...current, newReview];
             });
           }
         }
@@ -162,7 +162,7 @@ function CollegeServer() {
       
     if (error) { toast.error(error.message); return; }
     
-    setReviews((r) => [data as Review, ...r]);
+    setReviews((r) => [...r, data as Review]);
     setComposer("");
   };
 
@@ -291,11 +291,11 @@ function CollegeServer() {
 
         {activeChannel === "general-chat" ? (
           <div className="flex-1 min-h-0 flex flex-col">
-            <ChatRoom collegeId={college.id} />
+            <ChatRoom collegeId={college.id} verified={verified} />
           </div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto py-4 flex flex-col-reverse">
+            <div className="flex-1 overflow-y-auto py-4 flex flex-col">
               {reviews.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
                   <div className="text-[15px] font-medium text-foreground">No posts yet in #{activeChannel}</div>
