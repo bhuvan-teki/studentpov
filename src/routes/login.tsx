@@ -61,11 +61,7 @@ function LoginPage() {
     return data.id as string;
   };
 
-  const ensureProfile = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
+  const ensureProfile = async (user: any) => {
     if (!user || !user.email) throw new Error("No logged in user found");
 
     const collegeId = await getCollegeId();
@@ -118,7 +114,7 @@ function LoginPage() {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     });
@@ -130,7 +126,7 @@ function LoginPage() {
     }
 
     try {
-      await ensureProfile();
+      await ensureProfile(data.user);
       toast.success("Welcome back to Studentpov");
       navigate({ to: "/communities" });
     } catch (err: any) {
@@ -163,8 +159,7 @@ function LoginPage() {
 
     setLoading(true);
 
-    // Creates the user AND logs them in immediately (since email confirmation is disabled)
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
     });
@@ -184,9 +179,8 @@ function LoginPage() {
       return;
     }
 
-    // Since they are now instantly authenticated, just build their profile and route them!
     try {
-      await ensureProfile();
+      await ensureProfile(data.user);
       toast.success("Account created! Welcome to Studentpov.");
       navigate({ to: "/communities" });
     } catch (err: any) {
