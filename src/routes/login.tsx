@@ -125,14 +125,6 @@ function LoginPage() {
 
     if (error) {
       setLoading(false);
-
-      const msg = error.message.toLowerCase();
-
-      if (msg.includes("email not confirmed") || msg.includes("not confirmed")) {
-        toast.error("Activate your account from the email sent to your inbox.");
-        return;
-      }
-
       toast.error("Wrong email or password.");
       return;
     }
@@ -174,14 +166,11 @@ function LoginPage() {
     const { error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/login`,
-      },
     });
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
+
       const msg = error.message.toLowerCase();
 
       if (
@@ -198,8 +187,15 @@ function LoginPage() {
       return;
     }
 
-    toast.success("Activation email sent. Open your inbox and activate your account.");
-    setMode("login");
+    try {
+      await ensureProfile();
+      toast.success("Account created. Welcome to Studentpov");
+      navigate({ to: "/communities" });
+    } catch (err: any) {
+      toast.error(err.message || "Profile setup failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
