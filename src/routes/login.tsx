@@ -163,35 +163,41 @@ function LoginPage() {
 
   setLoading(true);
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: normalizedEmail,
     password,
   });
 
+  // 1. Handle API errors first
   if (error) {
     setLoading(false);
-
     const msg = error.message.toLowerCase();
-
-    if (
-      msg.includes("already registered") ||
-      msg.includes("already exists") ||
-      msg.includes("user already")
-    ) {
+    
+    if (msg.includes("already registered") || msg.includes("already exists")) {
       toast.error("User already registered. Try to log in.");
       setMode("login");
       return;
     }
-
+    
+    console.error("Signup error:", error);
     toast.error(error.message);
     return;
   }
 
+  // 2. Verify session exists (confirms email confirmation is OFF)
+  if (!data.session) {
+    setLoading(false);
+    toast.error("Supabase still requires email confirmation. Disable it in Dashboard → Authentication → Settings.");
+    return;
+  }
+
+  // 3. Create profile
   try {
     await ensureProfile();
     toast.success("Account created. Welcome to Studentpov");
     navigate({ to: "/communities" });
   } catch (err: any) {
+    console.error("Profile setup failed:", err);
     toast.error(err.message || "Profile setup failed");
   } finally {
     setLoading(false);
