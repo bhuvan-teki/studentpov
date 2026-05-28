@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { ChatRoom } from "@/components/ChatRoom";
+import { Avatar } from "@/components/Avatar";
 
 type College = {
   id: string;
@@ -25,6 +26,8 @@ type Review = {
   created_at: string;
   profiles?: {
     anonymous_username?: string | null;
+    avatar_url?: string | null;
+    avatar_seed?: string | null;
   } | null;
 };
 
@@ -88,7 +91,9 @@ function CollegeServer() {
 .select(`
   *,
   profiles (
-    anonymous_username
+    anonymous_username,
+    avatar_url,
+    avatar_seed
   )
 `)
         .eq("college_id", college.id)
@@ -352,16 +357,21 @@ function CollegeServer() {
 }
 
 function PostCard({ review }: { review: Review }) {
+  const name = review.profiles?.anonymous_username || "anonymous";
   return (
     <article className="group flex gap-3 px-4 md:px-6 py-2 hover:bg-white/[0.035] transition">
-      <div className="h-9 w-9 rounded-full bg-gradient-to-br from-white/20 to-white/5 border border-white/10 grid place-items-center text-[12px] font-semibold shrink-0 mt-0.5">
-        A
-      </div>
+      <Avatar
+        url={review.profiles?.avatar_url}
+        seed={review.profiles?.avatar_seed}
+        name={name}
+        size={36}
+        className="mt-0.5"
+      />
 
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="text-[15px] font-medium text-foreground hover:underline cursor-pointer">
-            {review.profiles?.anonymous_username || "anonymous"}
+            {name}
           </span>
           <span className="text-[11px] text-muted-foreground">
             {new Date(review.created_at).toLocaleString("en-IN", {

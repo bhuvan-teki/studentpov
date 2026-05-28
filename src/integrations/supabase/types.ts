@@ -88,6 +88,38 @@ export type Database = {
         }
         Relationships: []
       }
+      messages: {
+        Row: {
+          college_id: string
+          content: string
+          created_at: string
+          id: string
+          profile_id: string
+        }
+        Insert: {
+          college_id: string
+          content: string
+          created_at?: string
+          id?: string
+          profile_id: string
+        }
+        Update: {
+          college_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       posts: {
         Row: {
           branch: string | null
@@ -143,27 +175,42 @@ export type Database = {
       }
       profiles: {
         Row: {
+          anonymous_username: string | null
+          avatar_seed: string | null
+          avatar_url: string | null
+          bio: string | null
           college_id: string | null
           created_at: string
           display_name: string | null
           email: string | null
           id: string
+          reputation_score: number
           verification_status: string
         }
         Insert: {
+          anonymous_username?: string | null
+          avatar_seed?: string | null
+          avatar_url?: string | null
+          bio?: string | null
           college_id?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null
           id: string
+          reputation_score?: number
           verification_status?: string
         }
         Update: {
+          anonymous_username?: string | null
+          avatar_seed?: string | null
+          avatar_url?: string | null
+          bio?: string | null
           college_id?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null
           id?: string
+          reputation_score?: number
           verification_status?: string
         }
         Relationships: [
