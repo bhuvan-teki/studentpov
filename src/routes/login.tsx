@@ -267,14 +267,15 @@ function LoginPage() {
     }
 
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  data: { user },
+} = await supabase.auth.getUser();
 
-    if (!user) {
-      setLoading(false);
-      toast.error("Create an account or login before uploading documents");
-      return;
-    }
+if (!user) {
+  setLoading(false);
+  toast.error("First create an account, then upload documents for manual verification.");
+  setMode("signup");
+  return;
+}
 
     const { error } = await supabase.from("verification_documents").insert({
       user_id: user.id,
