@@ -320,11 +320,11 @@ function LoginPage() {
                     setMode(m);
                     setStep("form");
                   }}
-                  className={`rounded-xl py-2 border transition ${
-                    mode === m
-                      ? "bg-white/[0.08] border-white/[0.12] text-foreground"
-                      : "bg-white/[0.02] border-white/[0.06] text-muted-foreground"
-                  }`}
+                  className={`rounded-xl py-2 border transition backdrop-blur-sm ${
+  mode === m
+    ? "bg-zinc-900/80 border-zinc-700 text-white shadow-[0_0_20px_rgba(255,255,255,0.03)]"
+    : "bg-zinc-950/40 border-zinc-800 text-zinc-500 hover:bg-zinc-900/40"
+}`}
                 >
                   {m === "login" ? "Login" : m === "signup" ? "Create" : "Docs"}
                 </button>
@@ -346,14 +346,14 @@ function LoginPage() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Full name"
-                  className="glass-input w-full rounded-xl px-3 py-3 text-sm"
+                  className="glass-input w-full rounded-xl pl-10 pr-3 py-3 text-sm bg-white/[0.03] text-foreground placeholder:text-muted-foreground/60"
                 />
 
                 <input
                   value={docEmail}
                   onChange={(e) => setDocEmail(e.target.value)}
                   placeholder="College email if available"
-                  className="glass-input w-full rounded-xl px-3 py-3 text-sm"
+                  className="glass-input w-full rounded-xl pl-10 pr-3 py-3 text-sm bg-white/[0.03] text-foreground placeholder:text-muted-foreground/60"
                 />
 
                 <select
