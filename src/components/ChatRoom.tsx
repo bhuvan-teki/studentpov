@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Send, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
+import { Avatar } from "@/components/Avatar";
 
 type Message = {
   id: string;
@@ -11,6 +12,7 @@ type Message = {
   profile_id: string;
   profiles?: {
     anonymous_username?: string | null;
+    avatar_url?: string | null;
     avatar_seed?: string | null;
   } | null;
 };
@@ -38,8 +40,10 @@ export function ChatRoom({
           created_at,
           profile_id,
           profiles (
-  anonymous_username
-)
+            anonymous_username,
+            avatar_url,
+            avatar_seed
+          )
         `)
         .eq("college_id", collegeId)
         .order("created_at", { ascending: true });
@@ -66,7 +70,7 @@ export function ChatRoom({
 
             const { data: profileData } = await supabase
               .from("profiles")
-              .select("anonymous_username")
+              .select("anonymous_username, avatar_url, avatar_seed")
               .eq("id", newMsg.profile_id)
               .maybeSingle();
 
@@ -213,9 +217,12 @@ export function ChatRoom({
               >
                 <div className="w-10 shrink-0 mr-4 flex justify-center mt-0.5">
                   {!isConsecutive ? (
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-white/20 to-white/5 border border-white/10 flex items-center justify-center text-sm font-semibold text-foreground/80">
-                      {initial}
-                    </div>
+                    <Avatar
+                      url={msg.profiles?.avatar_url}
+                      seed={msg.profiles?.avatar_seed}
+                      name={name}
+                      size={40}
+                    />
                   ) : (
                     <div className="opacity-0 group-hover:opacity-100 text-[10px] text-muted-foreground mt-1">
                       {timeString}
