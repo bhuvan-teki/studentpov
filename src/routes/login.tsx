@@ -47,9 +47,11 @@ function LoginPage() {
     }
     setLoading(true);
     const { error } = await supabase.auth.signInWithOtp({
-      email: normalized,
-      options: { shouldCreateUser: true, emailRedirectTo: window.location.origin },
-    });
+  email: normalized,
+  options: {
+    shouldCreateUser: true,
+  },
+});
     setLoading(false);
     if (error) {
       toast.error(error.message);
@@ -66,7 +68,7 @@ function LoginPage() {
     }
     setLoading(true);
     const { error } = await supabase.auth.verifyOtp({
-      email,
+      email: email.trim().toLowerCase(),
       token: otp,
       type: "email",
     });
@@ -111,15 +113,23 @@ if (user) {
     .eq("id", user.id)
     .maybeSingle();
 
-  if (!existingProfile?.anonymous_username) {
-    await supabase
-      .from("profiles")
-      .update({
-        anonymous_username: randomName,
-        avatar_seed: crypto.randomUUID(),
-      })
-      .eq("id", user.id);
-  }
+  if (!existingProfile) {
+  await supabase.from("profiles").insert({
+    id: user.id,
+    email: user.email,
+    anonymous_username: randomName,
+    avatar_seed: crypto.randomUUID(),
+    verification_status: "verified",
+  });
+} else if (!existingProfile.anonymous_username) {
+  await supabase
+    .from("profiles")
+    .update({
+      anonymous_username: randomName,
+      avatar_seed: crypto.randomUUID(),
+    })
+    .eq("id", user.id);
+}
 }
 
 toast.success("Welcome to Studentpov");
