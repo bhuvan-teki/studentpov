@@ -198,7 +198,8 @@ export function ChatRoom({
   msg.profiles?.anonymous_username ||
   "anonymous";
 
-            const initial = name[0]?.toUpperCase() || "A";
+
+
 
             const timeString = new Date(msg.created_at).toLocaleTimeString(
               "en-IN",
