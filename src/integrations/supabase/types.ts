@@ -88,6 +88,38 @@ export type Database = {
         }
         Relationships: []
       }
+      messages: {
+        Row: {
+          college_id: string
+          content: string
+          created_at: string
+          id: string
+          profile_id: string
+        }
+        Insert: {
+          college_id: string
+          content: string
+          created_at?: string
+          id?: string
+          profile_id: string
+        }
+        Update: {
+          college_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       posts: {
         Row: {
           branch: string | null
