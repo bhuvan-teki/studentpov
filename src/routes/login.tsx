@@ -7,8 +7,10 @@ import { TopNav, LiveCount } from "@/components/TopNav";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/login")({
-  component: CreateAccountPage,
+  component: AuthPage,
 });
+
+type Mode = "login" | "create";
 
 const COLLEGE_DOMAIN = "@chaitanya.edu.in";
 const COLLEGE_SLUG = "chaitanya-deemed";
@@ -18,8 +20,10 @@ const avatars = ["🦊", "🐺", "🐯", "🦅", "🐼", "🤖", "👾", "🦉"]
 const inputClass =
   "w-full rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white placeholder:text-zinc-500 px-4 py-3 outline-none transition focus:border-white/[0.12] focus:bg-zinc-950 shadow-none";
 
-function CreateAccountPage() {
+function AuthPage() {
   const navigate = useNavigate();
+
+  const [mode, setMode] = useState<Mode>("login");
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -29,7 +33,6 @@ function CreateAccountPage() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
   const [selectedAvatar, setSelectedAvatar] = useState(avatars[0]);
   const [loading, setLoading] = useState(false);
 
@@ -52,8 +55,36 @@ function CreateAccountPage() {
       .select("id", { count: "exact", head: true });
 
     if (error) throw error;
-
     return `anonymous_${(count || 0) + 1}`;
+  }
+
+  async function handleLogin() {
+    if (!normalizedEmail.endsWith(COLLEGE_DOMAIN)) {
+      toast.error("Use your official Chaitanya student email.");
+      return;
+    }
+
+    if (!password) {
+      toast.error("Enter your password.");
+      return;
+    }
+
+    setLoading(true);
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+
+    if (error || !data.user) {
+      setLoading(false);
+      toast.error("Wrong email or password.");
+      return;
+    }
+
+    toast.success("Welcome back to Studentpov.");
+    setLoading(false);
+    navigate({ to: "/communities" });
   }
 
   async function handleCreateAccount() {
@@ -99,7 +130,8 @@ function CreateAccountPage() {
         msg.includes("already exists") ||
         msg.includes("user already")
       ) {
-        toast.error("User already registered.");
+        toast.error("User already registered. Try logging in.");
+        setMode("login");
         return;
       }
 
@@ -112,19 +144,19 @@ function CreateAccountPage() {
       const anonymousUsername = await getNextAnonymousUsername();
 
       const { error: profileError } = await supabase.from("profiles").upsert(
-  {
-    id: authData.user.id,
-    email: normalizedEmail,
-    college_id: collegeId,
-    verification_status: "verified",
-    first_name: firstName.trim(),
-    last_name: lastName.trim(),
-    anonymous_username: anonymousUsername,
-    avatar_seed: selectedAvatar,
-    bio: "",
-  },
-  { onConflict: "id" }
-);
+        {
+          id: authData.user.id,
+          email: normalizedEmail,
+          college_id: collegeId,
+          verification_status: "verified",
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          anonymous_username: anonymousUsername,
+          avatar_seed: selectedAvatar,
+          bio: "",
+        },
+        { onConflict: "id" }
+      );
 
       if (profileError) throw profileError;
 
@@ -146,11 +178,37 @@ function CreateAccountPage() {
           <div className="glass-card rounded-2xl p-7 md:p-9">
             <div className="text-center mb-7">
               <h1 className="text-[28px] md:text-[32px] font-semibold tracking-tight text-gradient">
-                Create Studentpov Account
+                Enter Studentpov
               </h1>
               <p className="mt-2 text-[14px] text-muted-foreground">
                 Verified student access. Anonymous public identity.
               </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 mb-6 text-[12px]">
+              <button
+                type="button"
+                onClick={() => setMode("login")}
+                className={`rounded-xl py-2 border transition ${
+                  mode === "login"
+                    ? "bg-zinc-900/80 border-zinc-700 text-white"
+                    : "bg-zinc-950/40 border-zinc-800 text-zinc-500"
+                }`}
+              >
+                Login
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMode("create")}
+                className={`rounded-xl py-2 border transition ${
+                  mode === "create"
+                    ? "bg-zinc-900/80 border-zinc-700 text-white"
+                    : "bg-zinc-950/40 border-zinc-800 text-zinc-500"
+                }`}
+              >
+                Create
+              </button>
             </div>
 
             <form
@@ -158,31 +216,33 @@ function CreateAccountPage() {
               autoComplete="off"
               onSubmit={(e) => {
                 e.preventDefault();
-                handleCreateAccount();
+                mode === "login" ? handleLogin() : handleCreateAccount();
               }}
             >
-              <div className="grid grid-cols-2 gap-3">
-                <div className="relative">
-                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              {mode === "create" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <input
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="First name"
+                      autoComplete="off"
+                      name="studentpov_first_name"
+                      className={`${inputClass} pl-10`}
+                    />
+                  </div>
+
                   <input
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="First name"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Last name"
                     autoComplete="off"
-                    name="studentpov_first_name"
-                    className={`${inputClass} pl-10`}
+                    name="studentpov_last_name"
+                    className={inputClass}
                   />
                 </div>
-
-                <input
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  placeholder="Last name"
-                  autoComplete="off"
-                  name="studentpov_last_name"
-                  className={inputClass}
-                />
-              </div>
+              )}
 
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -192,7 +252,7 @@ function CreateAccountPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="student@chaitanya.edu.in"
                   autoComplete="off"
-                  name="studentpov_college_email_create"
+                  name="studentpov_college_email"
                   className={`${inputClass} pl-10`}
                 />
               </div>
@@ -203,9 +263,9 @@ function CreateAccountPage() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Create password"
-                  autoComplete="new-password"
-                  name="studentpov_password_create"
+                  placeholder={mode === "login" ? "Password" : "Create password"}
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                  name="studentpov_password"
                   className={`${inputClass} pl-10 pr-11`}
                 />
                 <button
@@ -213,60 +273,56 @@ function CreateAccountPage() {
                   onClick={() => setShowPassword((v) => !v)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
 
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <input
-                  type={showConfirmPassword ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Re-enter password"
-                  autoComplete="new-password"
-                  name="studentpov_confirm_password_new"
-                  className={`${inputClass} pl-10 pr-11`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword((v) => !v)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-
-              <div>
-                <p className="mb-2 text-[12px] text-muted-foreground">
-                  Pick avatar
-                </p>
-
-                <div className="grid grid-cols-8 gap-2">
-                  {avatars.map((avatar) => (
+              {mode === "create" && (
+                <>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter password"
+                      autoComplete="new-password"
+                      name="studentpov_confirm_password"
+                      className={`${inputClass} pl-10 pr-11`}
+                    />
                     <button
-                      key={avatar}
                       type="button"
-                      onClick={() => setSelectedAvatar(avatar)}
-                      className={`h-10 rounded-xl border text-xl transition ${
-                        selectedAvatar === avatar
-                          ? "border-zinc-500 bg-zinc-900"
-                          : "border-zinc-800 bg-zinc-950/40 hover:bg-zinc-900/40"
-                      }`}
+                      onClick={() => setShowConfirmPassword((v) => !v)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     >
-                      {avatar}
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
-                  ))}
-                </div>
-              </div>
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-[12px] text-muted-foreground">
+                      Pick avatar
+                    </p>
+
+                    <div className="grid grid-cols-8 gap-2">
+                      {avatars.map((avatar) => (
+                        <button
+                          key={avatar}
+                          type="button"
+                          onClick={() => setSelectedAvatar(avatar)}
+                          className={`h-10 rounded-xl border text-xl transition ${
+                            selectedAvatar === avatar
+                              ? "border-zinc-500 bg-zinc-900"
+                              : "border-zinc-800 bg-zinc-950/40 hover:bg-zinc-900/40"
+                          }`}
+                        >
+                          {avatar}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
 
               <button
                 type="submit"
