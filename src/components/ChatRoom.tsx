@@ -38,9 +38,8 @@ export function ChatRoom({
           created_at,
           profile_id,
           profiles (
-            display_name,
-            email
-          )
+  anonymous_username
+)
         `)
         .eq("college_id", collegeId)
         .order("created_at", { ascending: true });
@@ -67,7 +66,7 @@ export function ChatRoom({
 
             const { data: profileData } = await supabase
               .from("profiles")
-              .select("display_name, email")
+              .select("anonymous_username")
               .eq("id", newMsg.profile_id)
               .maybeSingle();
 
@@ -192,9 +191,8 @@ export function ChatRoom({
               index > 0 && messages[index - 1].profile_id === msg.profile_id;
 
             const name =
-              msg.profiles?.display_name ||
-              msg.profiles?.email?.split("@")[0] ||
-              "anonymous student";
+  msg.profiles?.anonymous_username ||
+  "anonymous";
 
             const initial = name[0]?.toUpperCase() || "A";
 
