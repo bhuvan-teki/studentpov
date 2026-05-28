@@ -62,7 +62,9 @@ function LoginPage() {
   };
 
   const ensureProfile = async (user: any) => {
-    if (!user || !user.email) throw new Error("No logged in user found");
+    if (!user || !user.email) {
+      throw new Error("No logged in user found");
+    }
 
     const collegeId = await getCollegeId();
 
@@ -130,6 +132,7 @@ function LoginPage() {
       toast.success("Welcome back to Studentpov");
       navigate({ to: "/communities" });
     } catch (err: any) {
+      console.error("Profile setup failed:", err);
       toast.error(err.message || "Profile setup failed");
     } finally {
       setLoading(false);
@@ -166,14 +169,19 @@ function LoginPage() {
 
     if (error) {
       setLoading(false);
+
       const msg = error.message.toLowerCase();
-      
-      if (msg.includes("already registered") || msg.includes("already exists")) {
+
+      if (
+        msg.includes("already registered") ||
+        msg.includes("already exists") ||
+        msg.includes("user already")
+      ) {
         toast.error("User already registered. Try logging in.");
         setMode("login");
         return;
       }
-      
+
       console.error("Signup error:", error);
       toast.error(error.message);
       return;
