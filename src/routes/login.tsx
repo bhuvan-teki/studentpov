@@ -409,7 +409,7 @@ if (!user) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="yourname@chaitanya.edu.in"
-                    className="glass-input w-full rounded-xl pl-10 pr-3 py-3 text-sm"
+                    className="w-full rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white placeholder:text-zinc-500 pl-10 pr-3 py-3 outline-none transition focus:border-white/[0.12] focus:bg-zinc-950 shadow-none"
                   />
                 </div>
 
