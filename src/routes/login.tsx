@@ -348,14 +348,14 @@ if (!user) {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Full name"
-                  className="glass-input w-full rounded-xl pl-10 pr-3 py-3 text-sm bg-white/[0.03] text-foreground placeholder:text-muted-foreground/60"
+                  className="w-full rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white placeholder:text-zinc-500 pl-10 pr-11 py-3 outline-none transition focus:border-white/[0.12] focus:bg-zinc-950 shadow-none"
                 />
 
                 <input
                   value={docEmail}
                   onChange={(e) => setDocEmail(e.target.value)}
                   placeholder="College email if available"
-                  className="glass-input w-full rounded-xl pl-10 pr-3 py-3 text-sm bg-white/[0.03] text-foreground placeholder:text-muted-foreground/60"
+                  className="w-full rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white placeholder:text-zinc-500 pl-10 pr-11 py-3 outline-none transition focus:border-white/[0.12] focus:bg-zinc-950 shadow-none"
                 />
 
                 <select
