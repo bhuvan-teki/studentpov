@@ -75,8 +75,55 @@ function LoginPage() {
       toast.error(error.message);
       return;
     }
-    toast.success("Welcome to Studentpov");
-    navigate({ to: "/communities" });
+    const {
+  data: { user },
+} = await supabase.auth.getUser();
+
+if (user) {
+  const adjectives = [
+    "silent",
+    "hidden",
+    "rapid",
+    "midnight",
+    "shadow",
+    "bright",
+  ];
+
+  const animals = [
+    "tiger",
+    "eagle",
+    "fox",
+    "wolf",
+    "panther",
+    "falcon",
+  ];
+
+  const randomName =
+    adjectives[Math.floor(Math.random() * adjectives.length)] +
+    "_" +
+    animals[Math.floor(Math.random() * animals.length)] +
+    "_" +
+    Math.floor(100 + Math.random() * 900);
+
+  const { data: existingProfile } = await supabase
+    .from("profiles")
+    .select("id, anonymous_username")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!existingProfile?.anonymous_username) {
+    await supabase
+      .from("profiles")
+      .update({
+        anonymous_username: randomName,
+        avatar_seed: crypto.randomUUID(),
+      })
+      .eq("id", user.id);
+  }
+}
+
+toast.success("Welcome to Studentpov");
+navigate({ to: "/communities" });
   };
 
   return (
