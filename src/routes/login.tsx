@@ -42,6 +42,7 @@ function LoginPage() {
   const [step, setStep] = useState<Step>("form");
 
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const [confirmPassword, setConfirmPassword] = useState("");
