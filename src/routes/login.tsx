@@ -141,68 +141,62 @@ function LoginPage() {
   };
 
   const startSignup = async () => {
-    if (!normalizedEmail.endsWith(COLLEGE_DOMAIN)) {
-      toast.error("Only Chaitanya student emails are allowed.");
+  if (!normalizedEmail.endsWith(COLLEGE_DOMAIN)) {
+    toast.error("Only Chaitanya student emails are allowed.");
+    return;
+  }
+
+  if (password.length < 6) {
+    toast.error("Password must be at least 6 characters");
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    toast.error("Passwords do not match");
+    return;
+  }
+
+  if (!accept) {
+    toast.error("Please accept Terms & Conditions");
+    return;
+  }
+
+  setLoading(true);
+
+  const { error } = await supabase.auth.signUp({
+    email: normalizedEmail,
+    password,
+  });
+
+  if (error) {
+    setLoading(false);
+
+    const msg = error.message.toLowerCase();
+
+    if (
+      msg.includes("already registered") ||
+      msg.includes("already exists") ||
+      msg.includes("user already")
+    ) {
+      toast.error("User already registered. Try to log in.");
+      setMode("login");
       return;
     }
 
-    if (password.length < 6) {
-      toast.error("Password must be at least 6 characters");
-      return;
-    }
+    toast.error(error.message);
+    return;
+  }
 
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-
-    if (!accept) {
-      toast.error("Please accept Terms & Conditions");
-      return;
-    }
-
-    setLoading(true);
-
-    const { data, error } = await supabase.auth.signUp({
-  email: normalizedEmail,
-  password,
-});
-
-if (!data.session) {
-  setLoading(false);
-  toast.error("Email confirmation is still enabled in Supabase. Turn it off first.");
-  return;
-}
-
-    if (error) {
-      setLoading(false);
-
-      const msg = error.message.toLowerCase();
-
-      if (
-        msg.includes("already registered") ||
-        msg.includes("already exists") ||
-        msg.includes("user already")
-      ) {
-        toast.error("User already registered. Try to log in.");
-        setMode("login");
-        return;
-      }
-
-      toast.error(error.message);
-      return;
-    }
-
-    try {
-      await ensureProfile();
-      toast.success("Account created. Welcome to Studentpov");
-      navigate({ to: "/communities" });
-    } catch (err: any) {
-      toast.error(err.message || "Profile setup failed");
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    await ensureProfile();
+    toast.success("Account created. Welcome to Studentpov");
+    navigate({ to: "/communities" });
+  } catch (err: any) {
+    toast.error(err.message || "Profile setup failed");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <main className="min-h-screen flex flex-col">
