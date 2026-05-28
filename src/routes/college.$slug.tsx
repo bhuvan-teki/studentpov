@@ -23,6 +23,9 @@ type Review = {
   branch: string | null;
   year: string | null;
   created_at: string;
+  profiles?: {
+    anonymous_username?: string | null;
+  } | null;
 };
 
 const CHANNEL_GROUPS: { label: string; channels: string[] }[] = [
@@ -82,7 +85,12 @@ function CollegeServer() {
     const fetchReviews = async () => {
       const { data } = await supabase
         .from("reviews")
-        .select("*")
+.select(`
+  *,
+  profiles (
+    anonymous_username
+  )
+`)
         .eq("college_id", college.id)
         .eq("channel", activeChannel)
         .order("created_at", { ascending: true })
@@ -353,7 +361,7 @@ function PostCard({ review }: { review: Review }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="text-[15px] font-medium text-foreground hover:underline cursor-pointer">
-            anonymous student
+            {review.profiles?.anonymous_username || "anonymous"}
           </span>
           <span className="text-[11px] text-muted-foreground">
             {new Date(review.created_at).toLocaleString("en-IN", {
