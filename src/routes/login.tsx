@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { ArrowRight, Loader2, Lock, Mail, User } from "lucide-react";
+import { ArrowRight, Loader2, Lock, Mail, User, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 import { TopNav, LiveCount } from "@/components/TopNav";
@@ -12,15 +12,6 @@ export const Route = createFileRoute("/login")({
 
 const COLLEGE_DOMAIN = "@chaitanya.edu.in";
 const COLLEGE_SLUG = "chaitanya-deemed";
-
-const usernames = [
-  "silent_wolf_837",
-  "hidden_falcon_221",
-  "midnight_panther_942",
-  "rapid_tiger_508",
-  "shadow_fox_119",
-  "bright_eagle_704",
-];
 
 const avatars = ["🦊", "🐺", "🐯", "🦅", "🐼", "🤖", "👾", "🦉"];
 
@@ -36,7 +27,7 @@ function CreateAccountPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  const [selectedUsername, setSelectedUsername] = useState(usernames[0]);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [selectedAvatar, setSelectedAvatar] = useState(avatars[0]);
   const [loading, setLoading] = useState(false);
 
@@ -51,6 +42,16 @@ function CreateAccountPage() {
 
     if (error || !data) throw new Error("College not found.");
     return data.id;
+  }
+
+  async function getNextAnonymousUsername() {
+    const { count, error } = await supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true });
+
+    if (error) throw error;
+
+    return `anonymous_${(count || 0) + 1}`;
   }
 
   async function handleCreateAccount() {
@@ -80,18 +81,6 @@ function CreateAccountPage() {
     }
 
     setLoading(true);
-
-    const { data: existingUsername } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("anonymous_username", selectedUsername)
-      .maybeSingle();
-
-    if (existingUsername) {
-      setLoading(false);
-      toast.error("Username already taken. Pick another one.");
-      return;
-    }
 
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: normalizedEmail,
@@ -126,7 +115,7 @@ function CreateAccountPage() {
         verification_status: "verified",
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        anonymous_username: selectedUsername,
+        anonymous_username: await getNextAnonymousUsername(),
         avatar_seed: selectedAvatar,
         bio: "",
       });
@@ -158,7 +147,11 @@ function CreateAccountPage() {
               </p>
             </div>
 
-            <div className="space-y-3">
+            <form 
+              className="space-y-3" 
+              autoComplete="off" 
+              onSubmit={(e) => e.preventDefault()}
+            >
               <div className="grid grid-cols-2 gap-3">
                 <div className="relative">
                   <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -185,6 +178,8 @@ function CreateAccountPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="student@chaitanya.edu.in"
+                  autoComplete="off"
+                  name="studentpov_college_email_create"
                   className={`${inputClass} pl-10`}
                 />
               </div>
@@ -196,39 +191,34 @@ function CreateAccountPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Create password"
+                  autoComplete="new-password"
+                  name="studentpov_password_create"
                   className={`${inputClass} pl-10`}
                 />
               </div>
 
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Re-enter password"
-                className={inputClass}
-              />
-
-              <div>
-                <p className="mb-2 text-[12px] text-muted-foreground">
-                  Pick anonymous username
-                </p>
-
-                <div className="grid grid-cols-2 gap-2">
-                  {usernames.map((name) => (
-                    <button
-                      key={name}
-                      type="button"
-                      onClick={() => setSelectedUsername(name)}
-                      className={`rounded-xl border px-3 py-2 text-[12px] transition ${
-                        selectedUsername === name
-                          ? "border-zinc-500 bg-zinc-900 text-white"
-                          : "border-zinc-800 bg-zinc-950/40 text-zinc-500 hover:bg-zinc-900/40"
-                      }`}
-                    >
-                      {name}
-                    </button>
-                  ))}
-                </div>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter password"
+                  autoComplete="new-password"
+                  name="studentpov_confirm_password_new"
+                  className={`${inputClass} pl-10 pr-11`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
               </div>
 
               <div>
@@ -279,7 +269,7 @@ function CreateAccountPage() {
               <p className="text-center text-[11px] text-muted-foreground">
                 Your real name is private. Public identity uses only username and avatar.
               </p>
-            </div>
+            </form>
           </div>
         </div>
       </section>
