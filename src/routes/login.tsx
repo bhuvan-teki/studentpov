@@ -131,6 +131,14 @@ function LoginPage() {
 
     if (error) {
       setLoading(false);
+
+      const msg = error.message.toLowerCase();
+
+      if (msg.includes("email not confirmed") || msg.includes("not confirmed")) {
+        toast.error("Activate your account from the email sent to your inbox.");
+        return;
+      }
+
       toast.error("Wrong email or password. Try document verification.");
       setMode("documents");
       return;
@@ -173,35 +181,32 @@ function LoginPage() {
     const { error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/login`,
+      },
     });
 
+    setLoading(false);
+
     if (error) {
-      setLoading(false);
+      const msg = error.message.toLowerCase();
+
+      if (
+        msg.includes("already registered") ||
+        msg.includes("already exists") ||
+        msg.includes("user already")
+      ) {
+        toast.error("User already registered. Try to log in.");
+        setMode("login");
+        return;
+      }
+
       toast.error(error.message);
       return;
     }
 
-    const { error: loginError } = await supabase.auth.signInWithPassword({
-      email: normalizedEmail,
-      password,
-    });
-
-    if (loginError) {
-      setLoading(false);
-      toast.error("Account created. Please login now.");
-      setMode("login");
-      return;
-    }
-
-    try {
-      await ensureProfile();
-      toast.success("Account created. Welcome to Studentpov");
-      navigate({ to: "/communities" });
-    } catch (err: any) {
-      toast.error(err.message || "Profile setup failed");
-    } finally {
-      setLoading(false);
-    }
+    toast.success("Activation email sent. Open your inbox and activate your account.");
+    setMode("login");
   };
 
   const submitDocument = async () => {
