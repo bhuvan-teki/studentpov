@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Mail, Upload, ArrowRight, Loader2, Lock } from "lucide-react";
+import { Mail, ArrowRight, Loader2, Lock, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { TopNav, LiveCount } from "@/components/TopNav";
 import { toast } from "sonner";
@@ -42,7 +42,7 @@ function LoginPage() {
   const [step, setStep] = useState<Step>("form");
 
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const [confirmPassword, setConfirmPassword] = useState("");
   const [otp, setOtp] = useState("");
@@ -192,11 +192,11 @@ function LoginPage() {
     }
 
     const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: normalizedEmail,
-      options: {
-        shouldCreateUser: false,
-      },
-    });
+  email: normalizedEmail,
+  options: {
+    shouldCreateUser: false,
+  },
+});
 
     setLoading(false);
 
@@ -218,10 +218,10 @@ function LoginPage() {
     setLoading(true);
 
     const { error } = await supabase.auth.verifyOtp({
-      email: normalizedEmail,
-      token: otp,
-      type: "email",
-    });
+  email: normalizedEmail,
+  token: otp,
+  type: "email",
+});
 
     if (error) {
       setLoading(false);
@@ -412,15 +412,23 @@ function LoginPage() {
                 </div>
 
                 <div className="mt-3 relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Password"
-                    className="glass-input w-full rounded-xl pl-10 pr-3 py-3 text-sm"
-                  />
-                </div>
+  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+  <input
+    type={showPassword ? "text" : "password"}
+    value={password}
+    onChange={(e) => setPassword(e.target.value)}
+    placeholder="Password"
+    autoComplete="current-password"
+    className="glass-input w-full rounded-xl pl-10 pr-11 py-3 text-sm bg-white/[0.03] text-foreground placeholder:text-muted-foreground/60"
+  />
+  <button
+    type="button"
+    onClick={() => setShowPassword((v) => !v)}
+    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+  >
+    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+  </button>
+</div>
 
                 {mode === "signup" && (
                   <>
