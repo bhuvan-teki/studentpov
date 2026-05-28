@@ -439,7 +439,7 @@ if (!user) {
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Confirm password"
-                      className="glass-input mt-3 w-full rounded-xl px-3 py-3 text-sm"
+                      className="mt-3 w-full rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white placeholder:text-zinc-500 px-4 py-3 outline-none transition focus:border-white/[0.12] focus:bg-zinc-950 shadow-none"
                     />
 
                     <label className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none">
