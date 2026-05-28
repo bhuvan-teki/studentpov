@@ -9,11 +9,19 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as CommunitiesRouteImport } from './routes/communities'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProfileIndexRouteImport } from './routes/profile.index'
+import { Route as ProfileEditRouteImport } from './routes/profile.edit'
 import { Route as CollegeSlugRouteImport } from './routes/college.$slug'
 
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -29,6 +37,16 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProfileIndexRoute = ProfileIndexRouteImport.update({
+  id: '/profile/',
+  path: '/profile/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileEditRoute = ProfileEditRouteImport.update({
+  id: '/profile/edit',
+  path: '/profile/edit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CollegeSlugRoute = CollegeSlugRouteImport.update({
   id: '/college/$slug',
   path: '/college/$slug',
@@ -39,38 +57,79 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/communities': typeof CommunitiesRoute
   '/login': typeof LoginRoute
+  '/settings': typeof SettingsRoute
   '/college/$slug': typeof CollegeSlugRoute
+  '/profile/edit': typeof ProfileEditRoute
+  '/profile/': typeof ProfileIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/communities': typeof CommunitiesRoute
   '/login': typeof LoginRoute
+  '/settings': typeof SettingsRoute
   '/college/$slug': typeof CollegeSlugRoute
+  '/profile/edit': typeof ProfileEditRoute
+  '/profile': typeof ProfileIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/communities': typeof CommunitiesRoute
   '/login': typeof LoginRoute
+  '/settings': typeof SettingsRoute
   '/college/$slug': typeof CollegeSlugRoute
+  '/profile/edit': typeof ProfileEditRoute
+  '/profile/': typeof ProfileIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/communities' | '/login' | '/college/$slug'
+  fullPaths:
+    | '/'
+    | '/communities'
+    | '/login'
+    | '/settings'
+    | '/college/$slug'
+    | '/profile/edit'
+    | '/profile/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/communities' | '/login' | '/college/$slug'
-  id: '__root__' | '/' | '/communities' | '/login' | '/college/$slug'
+  to:
+    | '/'
+    | '/communities'
+    | '/login'
+    | '/settings'
+    | '/college/$slug'
+    | '/profile/edit'
+    | '/profile'
+  id:
+    | '__root__'
+    | '/'
+    | '/communities'
+    | '/login'
+    | '/settings'
+    | '/college/$slug'
+    | '/profile/edit'
+    | '/profile/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CommunitiesRoute: typeof CommunitiesRoute
   LoginRoute: typeof LoginRoute
+  SettingsRoute: typeof SettingsRoute
   CollegeSlugRoute: typeof CollegeSlugRoute
+  ProfileEditRoute: typeof ProfileEditRoute
+  ProfileIndexRoute: typeof ProfileIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -92,6 +151,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/profile/': {
+      id: '/profile/'
+      path: '/profile'
+      fullPath: '/profile/'
+      preLoaderRoute: typeof ProfileIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile/edit': {
+      id: '/profile/edit'
+      path: '/profile/edit'
+      fullPath: '/profile/edit'
+      preLoaderRoute: typeof ProfileEditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/college/$slug': {
       id: '/college/$slug'
       path: '/college/$slug'
@@ -106,8 +179,21 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CommunitiesRoute: CommunitiesRoute,
   LoginRoute: LoginRoute,
+  SettingsRoute: SettingsRoute,
   CollegeSlugRoute: CollegeSlugRoute,
+  ProfileEditRoute: ProfileEditRoute,
+  ProfileIndexRoute: ProfileIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
