@@ -20,7 +20,6 @@ export const Route = createFileRoute("/login")({
 });
 
 type Mode = "login" | "signup" | "documents";
-type Step = "form" | "otp";
 
 const COLLEGE_DOMAIN = "@chaitanya.edu.in";
 const COLLEGE_SLUG = "chaitanya-deemed";
@@ -28,6 +27,9 @@ const DOC_BUCKET = "verification-documents";
 
 const adjectives = ["silent", "hidden", "rapid", "midnight", "shadow", "bright"];
 const animals = ["tiger", "eagle", "fox", "wolf", "panther", "falcon"];
+
+const inputClass =
+  "w-full rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white placeholder:text-zinc-500 px-4 py-3 outline-none transition focus:border-white/[0.12] focus:bg-zinc-950 shadow-none";
 
 function makeAnonName() {
   return `${adjectives[Math.floor(Math.random() * adjectives.length)]}_${
@@ -39,14 +41,11 @@ function LoginPage() {
   const navigate = useNavigate();
 
   const [mode, setMode] = useState<Mode>("login");
-  const [step, setStep] = useState<Step>("form");
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
 
+  const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [otp, setOtp] = useState("");
   const [accept, setAccept] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -105,7 +104,6 @@ function LoginPage() {
         college_id: collegeId,
         verification_status: "verified",
         anonymous_username: existingProfile.anonymous_username || makeAnonName(),
-        avatar_seed: crypto.randomUUID(),
       })
       .eq("id", user.id);
 
@@ -126,36 +124,27 @@ function LoginPage() {
 
     setLoading(true);
 
-    const { error: loginError } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     });
 
-    if (loginError) {
+    if (error) {
       setLoading(false);
       toast.error("Wrong email or password. Try document verification.");
       setMode("documents");
       return;
     }
 
-    await supabase.auth.signOut();
-
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: normalizedEmail,
-      options: {
-        shouldCreateUser: false,
-      },
-    });
-
-    setLoading(false);
-
-    if (otpError) {
-      toast.error(otpError.message);
-      return;
+    try {
+      await ensureProfile();
+      toast.success("Welcome back to Studentpov");
+      navigate({ to: "/communities" });
+    } catch (err: any) {
+      toast.error(err.message || "Profile setup failed");
+    } finally {
+      setLoading(false);
     }
-
-    toast.success("6-digit verification code sent");
-    setStep("otp");
   };
 
   const startSignup = async () => {
@@ -192,47 +181,21 @@ function LoginPage() {
       return;
     }
 
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-  email: normalizedEmail,
-  options: {
-    shouldCreateUser: false,
-  },
-});
+    const { error: loginError } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
 
-    setLoading(false);
-
-    if (otpError) {
-      toast.error(otpError.message);
-      return;
-    }
-
-    toast.success("Account created. Enter the 6-digit code.");
-    setStep("otp");
-  };
-
-  const verifyOtp = async () => {
-    if (otp.length !== 6) {
-      toast.error("Enter the 6-digit code");
-      return;
-    }
-
-    setLoading(true);
-
-    const { error } = await supabase.auth.verifyOtp({
-  email: normalizedEmail,
-  token: otp,
-  type: "email",
-});
-
-    if (error) {
+    if (loginError) {
       setLoading(false);
-      toast.error(error.message);
+      toast.error("Account created. Please login now.");
+      setMode("login");
       return;
     }
 
     try {
       await ensureProfile();
-      toast.success("Welcome to Studentpov");
+      toast.success("Account created. Welcome to Studentpov");
       navigate({ to: "/communities" });
     } catch (err: any) {
       toast.error(err.message || "Profile setup failed");
@@ -252,9 +215,19 @@ function LoginPage() {
       return;
     }
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      toast.error("First create an account, then upload documents.");
+      setMode("signup");
+      return;
+    }
+
     setLoading(true);
 
-    const safeName = `${Date.now()}-${file.name.replaceAll(" ", "-")}`;
+    const safeName = `${user.id}/${Date.now()}-${file.name.replaceAll(" ", "-")}`;
 
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from(DOC_BUCKET)
@@ -265,17 +238,6 @@ function LoginPage() {
       toast.error(uploadError.message);
       return;
     }
-
-    const {
-  data: { user },
-} = await supabase.auth.getUser();
-
-if (!user) {
-  setLoading(false);
-  toast.error("First create an account, then upload documents for manual verification.");
-  setMode("signup");
-  return;
-}
 
     const { error } = await supabase.from("verification_documents").insert({
       user_id: user.id,
@@ -318,50 +280,38 @@ if (!user) {
               {(["login", "signup", "documents"] as Mode[]).map((m) => (
                 <button
                   key={m}
-                  onClick={() => {
-                    setMode(m);
-                    setStep("form");
-                  }}
+                  onClick={() => setMode(m)}
                   className={`rounded-xl py-2 border transition backdrop-blur-sm ${
-  mode === m
-    ? "bg-zinc-900/80 border-zinc-700 text-white shadow-[0_0_20px_rgba(255,255,255,0.03)]"
-    : "bg-zinc-950/40 border-zinc-800 text-zinc-500 hover:bg-zinc-900/40"
-}`}
+                    mode === m
+                      ? "bg-zinc-900/80 border-zinc-700 text-white"
+                      : "bg-zinc-950/40 border-zinc-800 text-zinc-500 hover:bg-zinc-900/40"
+                  }`}
                 >
                   {m === "login" ? "Login" : m === "signup" ? "Create" : "Docs"}
                 </button>
               ))}
             </div>
 
-            {step === "otp" ? (
-              <OtpStep
-                email={email}
-                otp={otp}
-                setOtp={setOtp}
-                loading={loading}
-                verify={verifyOtp}
-                back={() => setStep("form")}
-              />
-            ) : mode === "documents" ? (
+            {mode === "documents" ? (
               <div className="space-y-3">
                 <input
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Full name"
-                  className="w-full rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white placeholder:text-zinc-500 pl-10 pr-11 py-3 outline-none transition focus:border-white/[0.12] focus:bg-zinc-950 shadow-none"
+                  className={inputClass}
                 />
 
                 <input
                   value={docEmail}
                   onChange={(e) => setDocEmail(e.target.value)}
                   placeholder="College email if available"
-                  className="w-full rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white placeholder:text-zinc-500 pl-10 pr-11 py-3 outline-none transition focus:border-white/[0.12] focus:bg-zinc-950 shadow-none"
+                  className={inputClass}
                 />
 
                 <select
                   value={proofType}
                   onChange={(e) => setProofType(e.target.value)}
-                  className="glass-input w-full rounded-xl px-3 py-3 text-sm bg-background"
+                  className={inputClass}
                 >
                   <option>Student ID card</option>
                   <option>Fee receipt</option>
@@ -377,14 +327,14 @@ if (!user) {
                   type="file"
                   accept="image/*,.pdf"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  className="glass-input w-full rounded-xl px-3 py-3 text-sm"
+                  className={inputClass}
                 />
 
                 <textarea
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Short note for admin"
-                  className="glass-input w-full rounded-xl px-3 py-3 text-sm resize-none"
+                  className={`${inputClass} resize-none`}
                   rows={3}
                 />
 
@@ -409,28 +359,28 @@ if (!user) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="yourname@chaitanya.edu.in"
-                    className="w-full rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white placeholder:text-zinc-500 pl-10 pr-3 py-3 outline-none transition focus:border-white/[0.12] focus:bg-zinc-950 shadow-none"
+                    className={`${inputClass} pl-10`}
                   />
                 </div>
 
                 <div className="mt-3 relative">
-  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-  <input
-    type={showPassword ? "text" : "password"}
-    value={password}
-    onChange={(e) => setPassword(e.target.value)}
-    placeholder="Password"
-    autoComplete="current-password"
-    className="glass-input w-full rounded-xl pl-10 pr-11 py-3 text-sm bg-white/[0.03] text-foreground placeholder:text-muted-foreground/60"
-  />
-  <button
-    type="button"
-    onClick={() => setShowPassword((v) => !v)}
-    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-  >
-    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-  </button>
-</div>
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Password"
+                    autoComplete="current-password"
+                    className={`${inputClass} pl-10 pr-11`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
 
                 {mode === "signup" && (
                   <>
@@ -439,7 +389,7 @@ if (!user) {
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Confirm password"
-                      className="mt-3 w-full rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white placeholder:text-zinc-500 px-4 py-3 outline-none transition focus:border-white/[0.12] focus:bg-zinc-950 shadow-none"
+                      className={`mt-3 ${inputClass}`}
                     />
 
                     <label className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none">
@@ -485,54 +435,5 @@ if (!user) {
         </div>
       </section>
     </main>
-  );
-}
-
-function OtpStep({
-  email,
-  otp,
-  setOtp,
-  loading,
-  verify,
-  back,
-}: {
-  email: string;
-  otp: string;
-  setOtp: (v: string) => void;
-  loading: boolean;
-  verify: () => void;
-  back: () => void;
-}) {
-  return (
-    <div>
-      <p className="text-[13px] text-muted-foreground text-center mb-5">
-        Enter the 6-digit code sent to{" "}
-        <span className="text-foreground">{email}</span>
-      </p>
-
-      <input
-        inputMode="numeric"
-        maxLength={6}
-        value={otp}
-        onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-        placeholder="• • • • • •"
-        className="glass-input w-full rounded-xl py-4 text-center text-xl tracking-[0.5em] text-foreground font-medium"
-      />
-
-      <button
-        disabled={loading}
-        onClick={verify}
-        className="mt-4 w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
-      >
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify & Enter"}
-      </button>
-
-      <button
-        onClick={back}
-        className="mt-4 text-[12px] text-muted-foreground hover:text-foreground transition"
-      >
-        ← Back
-      </button>
-    </div>
   );
 }
