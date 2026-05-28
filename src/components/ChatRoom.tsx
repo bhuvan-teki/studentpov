@@ -15,7 +15,13 @@ type Message = {
   } | null;
 };
 
-export function ChatRoom({ collegeId }: { collegeId: string }) {
+export function ChatRoom({
+  collegeId,
+  verified,
+}: {
+  collegeId: string;
+  verified: boolean;
+}) {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
