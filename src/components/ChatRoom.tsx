@@ -10,8 +10,8 @@ type Message = {
   created_at: string;
   profile_id: string;
   profiles?: {
-    display_name?: string | null;
-    email?: string | null;
+    anonymous_username?: string | null;
+    avatar_seed?: string | null;
   } | null;
 };
 
