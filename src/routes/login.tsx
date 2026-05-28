@@ -163,10 +163,16 @@ function LoginPage() {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password,
-    });
+    const { data, error } = await supabase.auth.signUp({
+  email: normalizedEmail,
+  password,
+});
+
+if (!data.session) {
+  setLoading(false);
+  toast.error("Email confirmation is still enabled in Supabase. Turn it off first.");
+  return;
+}
 
     if (error) {
       setLoading(false);
