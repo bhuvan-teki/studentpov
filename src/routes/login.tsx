@@ -111,17 +111,20 @@ function CreateAccountPage() {
       const collegeId = await getCollegeId();
       const anonymousUsername = await getNextAnonymousUsername();
 
-      const { error: profileError } = await supabase.from("profiles").insert({
-        id: authData.user.id,
-        email: normalizedEmail,
-        college_id: collegeId,
-        verification_status: "verified",
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        anonymous_username: anonymousUsername,
-        avatar_seed: selectedAvatar,
-        bio: "",
-      });
+      const { error: profileError } = await supabase.from("profiles").upsert(
+  {
+    id: authData.user.id,
+    email: normalizedEmail,
+    college_id: collegeId,
+    verification_status: "verified",
+    first_name: firstName.trim(),
+    last_name: lastName.trim(),
+    anonymous_username: anonymousUsername,
+    avatar_seed: selectedAvatar,
+    bio: "",
+  },
+  { onConflict: "id" }
+);
 
       if (profileError) throw profileError;
 
