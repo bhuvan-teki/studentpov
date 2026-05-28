@@ -27,7 +27,9 @@ function CreateAccountPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [selectedAvatar, setSelectedAvatar] = useState(avatars[0]);
   const [loading, setLoading] = useState(false);
 
@@ -107,6 +109,7 @@ function CreateAccountPage() {
 
     try {
       const collegeId = await getCollegeId();
+      const anonymousUsername = await getNextAnonymousUsername();
 
       const { error: profileError } = await supabase.from("profiles").insert({
         id: authData.user.id,
@@ -115,7 +118,7 @@ function CreateAccountPage() {
         verification_status: "verified",
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        anonymous_username: await getNextAnonymousUsername(),
+        anonymous_username: anonymousUsername,
         avatar_seed: selectedAvatar,
         bio: "",
       });
@@ -147,10 +150,13 @@ function CreateAccountPage() {
               </p>
             </div>
 
-            <form 
-              className="space-y-3" 
-              autoComplete="off" 
-              onSubmit={(e) => e.preventDefault()}
+            <form
+              className="space-y-3"
+              autoComplete="off"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCreateAccount();
+              }}
             >
               <div className="grid grid-cols-2 gap-3">
                 <div className="relative">
@@ -159,6 +165,8 @@ function CreateAccountPage() {
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     placeholder="First name"
+                    autoComplete="off"
+                    name="studentpov_first_name"
                     className={`${inputClass} pl-10`}
                   />
                 </div>
@@ -167,6 +175,8 @@ function CreateAccountPage() {
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   placeholder="Last name"
+                  autoComplete="off"
+                  name="studentpov_last_name"
                   className={inputClass}
                 />
               </div>
@@ -187,14 +197,25 @@ function CreateAccountPage() {
               <div className="relative">
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Create password"
                   autoComplete="new-password"
                   name="studentpov_password_create"
-                  className={`${inputClass} pl-10`}
+                  className={`${inputClass} pl-10 pr-11`}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
               </div>
 
               <div className="relative">
@@ -245,8 +266,8 @@ function CreateAccountPage() {
               </div>
 
               <button
+                type="submit"
                 disabled={loading}
-                onClick={handleCreateAccount}
                 className="w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loading ? (
