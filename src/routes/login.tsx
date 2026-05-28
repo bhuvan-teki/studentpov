@@ -19,11 +19,10 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-type Mode = "login" | "signup" | "documents";
+type Mode = "login" | "signup";
 
 const COLLEGE_DOMAIN = "@chaitanya.edu.in";
 const COLLEGE_SLUG = "chaitanya-deemed";
-const DOC_BUCKET = "verification-documents";
 
 const adjectives = ["silent", "hidden", "rapid", "midnight", "shadow", "bright"];
 const animals = ["tiger", "eagle", "fox", "wolf", "panther", "falcon"];
@@ -49,12 +48,6 @@ function LoginPage() {
   const [accept, setAccept] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const [fullName, setFullName] = useState("");
-  const [docEmail, setDocEmail] = useState("");
-  const [proofType, setProofType] = useState("Student ID card");
-  const [note, setNote] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-
   const normalizedEmail = email.trim().toLowerCase();
 
   const getCollegeId = async () => {
@@ -77,11 +70,13 @@ function LoginPage() {
 
     const collegeId = await getCollegeId();
 
-    const { data: existingProfile } = await supabase
+    const { data: existingProfile, error: profileFetchError } = await supabase
       .from("profiles")
       .select("id, anonymous_username")
       .eq("id", user.id)
       .maybeSingle();
+
+    if (profileFetchError) throw profileFetchError;
 
     if (!existingProfile) {
       const { error } = await supabase.from("profiles").insert({
@@ -112,8 +107,7 @@ function LoginPage() {
 
   const startLogin = async () => {
     if (!normalizedEmail.endsWith(COLLEGE_DOMAIN)) {
-      toast.error("Use your Chaitanya student email or verify with documents.");
-      setMode("documents");
+      toast.error("Use your official Chaitanya student email.");
       return;
     }
 
@@ -139,8 +133,7 @@ function LoginPage() {
         return;
       }
 
-      toast.error("Wrong email or password. Try document verification.");
-      setMode("documents");
+      toast.error("Wrong email or password.");
       return;
     }
 
@@ -209,62 +202,6 @@ function LoginPage() {
     setMode("login");
   };
 
-  const submitDocument = async () => {
-    if (!fullName.trim()) {
-      toast.error("Enter your full name");
-      return;
-    }
-
-    if (!file) {
-      toast.error("Upload a valid document");
-      return;
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      toast.error("First create an account, then upload documents.");
-      setMode("signup");
-      return;
-    }
-
-    setLoading(true);
-
-    const safeName = `${user.id}/${Date.now()}-${file.name.replaceAll(" ", "-")}`;
-
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from(DOC_BUCKET)
-      .upload(safeName, file);
-
-    if (uploadError) {
-      setLoading(false);
-      toast.error(uploadError.message);
-      return;
-    }
-
-    const { error } = await supabase.from("verification_documents").insert({
-      user_id: user.id,
-      file_url: uploadData.path,
-      proof_type: proofType,
-      full_name: fullName.trim(),
-      college_email: docEmail.trim().toLowerCase() || null,
-      note: note.trim() || null,
-      status: "pending",
-    });
-
-    setLoading(false);
-
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-
-    toast.success("Verification submitted. Admin will review soon.");
-    navigate({ to: "/communities" });
-  };
-
   return (
     <main className="min-h-screen flex flex-col">
       <TopNav rightSlot={<LiveCount />} />
@@ -281,8 +218,8 @@ function LoginPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 mb-6 text-[12px]">
-              {(["login", "signup", "documents"] as Mode[]).map((m) => (
+            <div className="grid grid-cols-2 gap-2 mb-6 text-[12px]">
+              {(["login", "signup"] as Mode[]).map((m) => (
                 <button
                   key={m}
                   onClick={() => setMode(m)}
@@ -292,138 +229,86 @@ function LoginPage() {
                       : "bg-zinc-950/40 border-zinc-800 text-zinc-500 hover:bg-zinc-900/40"
                   }`}
                 >
-                  {m === "login" ? "Login" : m === "signup" ? "Create" : "Docs"}
+                  {m === "login" ? "Login" : "Create"}
                 </button>
               ))}
             </div>
 
-            {mode === "documents" ? (
-              <div className="space-y-3">
-                <input
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Full name"
-                  className={inputClass}
-                />
+            <label className="text-[12px] font-medium text-foreground/70">
+              College email address
+            </label>
 
-                <input
-                  value={docEmail}
-                  onChange={(e) => setDocEmail(e.target.value)}
-                  placeholder="College email if available"
-                  className={inputClass}
-                />
+            <div className="mt-2 relative">
+              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="yourname@chaitanya.edu.in"
+                autoComplete="email"
+                className={`${inputClass} pl-10`}
+              />
+            </div>
 
-                <select
-                  value={proofType}
-                  onChange={(e) => setProofType(e.target.value)}
-                  className={inputClass}
-                >
-                  <option>Student ID card</option>
-                  <option>Fee receipt</option>
-                  <option>Admission letter</option>
-                  <option>Class timetable</option>
-                  <option>Bonafide certificate</option>
-                  <option>Enrollment proof</option>
-                  <option>Hall ticket</option>
-                  <option>Other college proof</option>
-                </select>
-
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  className={inputClass}
-                />
-
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Short note for admin"
-                  className={`${inputClass} resize-none`}
-                  rows={3}
-                />
-
-                <button
-                  disabled={loading}
-                  onClick={submitDocument}
-                  className="w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify with documents"}
-                </button>
-              </div>
-            ) : (
-              <>
-                <label className="text-[12px] font-medium text-foreground/70">
-                  College email address
-                </label>
-
-                <div className="mt-2 relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="yourname@chaitanya.edu.in"
-                    className={`${inputClass} pl-10`}
-                  />
-                </div>
-
-                <div className="mt-3 relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Password"
-                    autoComplete="current-password"
-                    className={`${inputClass} pl-10 pr-11`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-
-                {mode === "signup" && (
-                  <>
-                    <input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Confirm password"
-                      className={`mt-3 ${inputClass}`}
-                    />
-
-                    <label className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={accept}
-                        onChange={(e) => setAccept(e.target.checked)}
-                        className="accent-white/80 h-3.5 w-3.5"
-                      />
-                      I accept Terms & Conditions
-                    </label>
-                  </>
+            <div className="mt-3 relative">
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                className={`${inputClass} pl-10 pr-11`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
                 )}
+              </button>
+            </div>
 
-                <button
-                  disabled={loading}
-                  onClick={mode === "login" ? startLogin : startSignup}
-                  className="mt-4 w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      Continue <ArrowRight className="h-4 w-4" />
-                    </>
-                  )}
-                </button>
+            {mode === "signup" && (
+              <>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm password"
+                  autoComplete="new-password"
+                  className={`mt-3 ${inputClass}`}
+                />
+
+                <label className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={accept}
+                    onChange={(e) => setAccept(e.target.checked)}
+                    className="accent-white/80 h-3.5 w-3.5"
+                  />
+                  I accept Terms & Conditions
+                </label>
               </>
             )}
+
+            <button
+              disabled={loading}
+              onClick={mode === "login" ? startLogin : startSignup}
+              className="mt-4 w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  Continue <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </button>
 
             <button
               type="button"
