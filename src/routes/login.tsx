@@ -141,80 +141,61 @@ function LoginPage() {
   };
 
   const startSignup = async () => {
-  if (!normalizedEmail.endsWith(COLLEGE_DOMAIN)) {
-    toast.error("Only Chaitanya student emails are allowed.");
-    return;
-  }
-
-  if (password.length < 6) {
-    toast.error("Password must be at least 6 characters");
-    return;
-  }
-
-  if (password !== confirmPassword) {
-    toast.error("Passwords do not match");
-    return;
-  }
-
-  if (!accept) {
-    toast.error("Please accept Terms & Conditions");
-    return;
-  }
-
-  setLoading(true);
-
-  const { data, error } = await supabase.auth.signUp({
-    email: normalizedEmail,
-    password,
-  });
-
-  if (error) {
-    setLoading(false);
-
-    const msg = error.message.toLowerCase();
-
-    if (
-      msg.includes("already registered") ||
-      msg.includes("already exists")
-    ) {
-      toast.error("User already registered. Try logging in.");
-      setMode("login");
+    if (!normalizedEmail.endsWith(COLLEGE_DOMAIN)) {
+      toast.error("Only Chaitanya student emails are allowed.");
       return;
     }
 
-    toast.error(error.message);
-    return;
-  }
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
 
-  // IMPORTANT FIX
-  // wait briefly for session hydration
-  await new Promise((resolve) => setTimeout(resolve, 1200));
+    if (password !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    if (!accept) {
+      toast.error("Please accept Terms & Conditions");
+      return;
+    }
 
-  if (!session?.user) {
-    setLoading(false);
-    toast.error("Signup succeeded but login session was not created.");
-    return;
-  }
+    setLoading(true);
 
-  try {
-    await ensureProfile();
-
-    toast.success("Account created successfully");
-
-    navigate({
-      to: "/communities",
+    // Creates the user AND logs them in immediately (since email confirmation is disabled)
+    const { error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
     });
-  } catch (err: any) {
-    console.error(err);
-    toast.error(err.message || "Profile setup failed");
-  } finally {
-    setLoading(false);
-  }
-};
+
+    if (error) {
+      setLoading(false);
+      const msg = error.message.toLowerCase();
+      
+      if (msg.includes("already registered") || msg.includes("already exists")) {
+        toast.error("User already registered. Try logging in.");
+        setMode("login");
+        return;
+      }
+      
+      console.error("Signup error:", error);
+      toast.error(error.message);
+      return;
+    }
+
+    // Since they are now instantly authenticated, just build their profile and route them!
+    try {
+      await ensureProfile();
+      toast.success("Account created! Welcome to Studentpov.");
+      navigate({ to: "/communities" });
+    } catch (err: any) {
+      console.error("Profile setup failed:", err);
+      toast.error(err.message || "Profile setup failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <main className="min-h-screen flex flex-col">
