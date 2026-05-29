@@ -10,6 +10,7 @@ type Message = {
   content: string;
   created_at: string;
   profile_id: string;
+  channel?: string;
   profiles?: {
     anonymous_username?: string | null;
     avatar_url?: string | null;
@@ -20,9 +21,11 @@ type Message = {
 export function ChatRoom({
   collegeId,
   verified,
+  channel = "welcome",
 }: {
   collegeId: string;
   verified: boolean;
+  channel?: string;
 }) {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -32,6 +35,8 @@ export function ChatRoom({
 
   useEffect(() => {
     const fetchMessages = async () => {
+      setLoading(true);
+
       const { data, error } = await supabase
         .from("messages")
         .select(`
@@ -39,6 +44,7 @@ export function ChatRoom({
           content,
           created_at,
           profile_id,
+          channel,
           profiles (
             anonymous_username,
             avatar_url,
@@ -46,16 +52,23 @@ export function ChatRoom({
           )
         `)
         .eq("college_id", collegeId)
+        .eq("channel", channel)
         .order("created_at", { ascending: true });
 
-      if (!error && data) setMessages(data as Message[]);
+      if (error) {
+        toast.error(error.message);
+        setMessages([]);
+      } else {
+        setMessages((data || []) as Message[]);
+      }
+
       setLoading(false);
     };
 
     fetchMessages();
 
     const chatChannel = supabase
-      .channel(`chat-${collegeId}`)
+      .channel(`chat-${collegeId}-${channel}`)
       .on(
         "postgres_changes",
         {
@@ -65,30 +78,31 @@ export function ChatRoom({
           filter: `college_id=eq.${collegeId}`,
         },
         async (payload) => {
+          const row = payload.new as Message;
+
           if (payload.eventType === "INSERT") {
-            const newMsg = payload.new as Message;
+            if (row.channel !== channel) return;
 
             const { data: profileData } = await supabase
               .from("profiles")
               .select("anonymous_username, avatar_url, avatar_seed")
-              .eq("id", newMsg.profile_id)
+              .eq("id", row.profile_id)
               .maybeSingle();
 
             const completeMessage = {
-              ...newMsg,
+              ...row,
               profiles: profileData,
             };
 
             setMessages((current) => {
-              if (current.some((m) => m.id === completeMessage.id)) {
-                return current;
-              }
+              if (current.some((m) => m.id === completeMessage.id)) return current;
               return [...current, completeMessage];
             });
           }
 
           if (payload.eventType === "UPDATE") {
             const updatedMsg = payload.new as Message;
+            if (updatedMsg.channel !== channel) return;
 
             setMessages((current) =>
               current.map((m) =>
@@ -111,7 +125,7 @@ export function ChatRoom({
     return () => {
       supabase.removeChannel(chatChannel);
     };
-  }, [collegeId]);
+  }, [collegeId, channel]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -122,8 +136,8 @@ export function ChatRoom({
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!user) {
-      toast.error("Sign in to chat");
+    if (!user || !verified) {
+      toast.error("Only verified students can send messages.");
       return;
     }
 
@@ -135,6 +149,7 @@ export function ChatRoom({
     const { error } = await supabase.from("messages").insert({
       college_id: collegeId,
       profile_id: user.id,
+      channel,
       content: messageText,
     });
 
@@ -155,11 +170,9 @@ export function ChatRoom({
 
   const editMessage = async (messageId: string, oldContent: string) => {
     const nextContent = prompt("Edit message:", oldContent);
-
     if (!nextContent) return;
 
     const cleanContent = nextContent.trim();
-
     if (!cleanContent || cleanContent === oldContent) return;
 
     const { error } = await supabase
@@ -186,20 +199,17 @@ export function ChatRoom({
       >
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
-            <p className="text-sm">Welcome to the general chat!</p>
-            <p className="text-xs mt-1 opacity-70">Say hi to your campus.</p>
+            <p className="text-sm">No messages yet in #{channel}</p>
+            <p className="text-xs mt-1 opacity-70">
+              Be the first verified student to start the conversation.
+            </p>
           </div>
         ) : (
           messages.map((msg, index) => {
             const isConsecutive =
               index > 0 && messages[index - 1].profile_id === msg.profile_id;
 
-            const name =
-  msg.profiles?.anonymous_username ||
-  "anonymous";
-
-
-
+            const name = msg.profiles?.anonymous_username || "anonymous";
 
             const timeString = new Date(msg.created_at).toLocaleTimeString(
               "en-IN",
@@ -271,26 +281,32 @@ export function ChatRoom({
       </div>
 
       <div className="px-4 md:px-6 pb-6 pt-2 bg-background">
-        <form
-          onSubmit={sendMessage}
-          className="bg-white/[0.06] rounded-lg p-1.5 pl-4 flex items-center gap-2 focus-within:bg-white/[0.08] transition-colors"
-        >
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Message #general-chat"
-            className="flex-1 bg-transparent outline-none text-[15px] py-1.5 placeholder:text-muted-foreground/50"
-          />
-
-          <button
-            type="submit"
-            disabled={!newMessage.trim()}
-            className="h-8 w-8 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/[0.1] disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+        {verified && user ? (
+          <form
+            onSubmit={sendMessage}
+            className="bg-white/[0.06] rounded-lg p-1.5 pl-4 flex items-center gap-2 focus-within:bg-white/[0.08] transition-colors"
           >
-            <Send className="h-4 w-4" />
-          </button>
-        </form>
+            <input
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder={`Message #${channel}`}
+              className="flex-1 bg-transparent outline-none text-[15px] py-1.5 placeholder:text-muted-foreground/50"
+            />
+
+            <button
+              type="submit"
+              disabled={!newMessage.trim()}
+              className="h-8 w-8 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/[0.1] disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+            >
+              <Send className="h-4 w-4" />
+            </button>
+          </form>
+        ) : (
+          <div className="bg-white/[0.06] rounded-lg px-4 py-3 text-sm text-muted-foreground">
+            You can browse anonymously — sign in with college email to chat.
+          </div>
+        )}
       </div>
     </div>
   );
