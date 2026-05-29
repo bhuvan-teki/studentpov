@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { ArrowRight, Loader2, Lock, Mail, User, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Loader2, Lock, Mail, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 import { TopNav, LiveCount } from "@/components/TopNav";
@@ -15,7 +15,23 @@ type Mode = "login" | "create";
 const COLLEGE_DOMAIN = "@chaitanya.edu.in";
 const COLLEGE_SLUG = "chaitanya-deemed";
 
-const avatars = ["🦊", "🐺", "🐯", "🦅", "🐼", "🤖", "👾", "🦉"];
+const anonymousPrefixes = [
+  "lunargleam", "lunardusk", "lunarhaze", "lunardrift", "lunarglow", "lunarwave",
+  "velvetgleam", "velvetdusk", "velvethaze", "velvetdrift", "velvetglow", "velvetwave",
+  "silvergleam", "silverdusk", "silverhaze", "silverdrift", "silverglow", "silverwave",
+  "indigogleam", "indigodusk", "indigohaze", "indigodrift", "indigoglow", "indigowave",
+  "violetgleam", "violetdusk", "violethaze", "violetdrift", "violetglow", "violetwave",
+  "nightgleam", "nightdusk", "nighthaze", "nightdrift", "nightglow", "nightwave",
+  "cosmicgleam", "cosmicdusk", "cosmichaze", "cosmicdrift", "cosmicglow", "cosmicwave",
+  "stellargleam", "stellardusk", "stellarhaze", "stellardrift", "stellarglow", "stellarwave",
+  "astralgleam", "astraldusk", "astralhaze", "astraldrift", "astralglow", "astralwave",
+  "ambientgleam", "ambientdusk", "ambienthaze", "ambientdrift", "ambientglow", "ambientwave",
+  "lucidgleam", "luciddusk", "lucidhaze", "luciddrift", "lucidglow", "lucidwave",
+  "opalgleam", "opaldusk", "opalhaze", "opaldrift", "opalglow", "opalwave",
+  "radiantgleam", "radiantdusk", "radianthaze", "radiantdrift", "radiantglow", "radiantwave",
+  "softgleam", "softdusk", "softhaze", "softdrift", "softglow", "softwave",
+  "quietgleam", "quietdusk", "quiethaze", "quietdrift", "quietglow", "quietwave"
+];
 
 const inputClass =
   "w-full rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white placeholder:text-zinc-500 px-4 py-3 outline-none transition focus:border-white/[0.12] focus:bg-zinc-950 shadow-none";
@@ -25,15 +41,13 @@ function AuthPage() {
 
   const [mode, setMode] = useState<Mode>("login");
 
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [selectedAvatar, setSelectedAvatar] = useState(avatars[0]);
+  const [selectedPrefix, setSelectedPrefix] = useState("lunarglow");
   const [loading, setLoading] = useState(false);
 
   const normalizedEmail = email.trim().toLowerCase();
@@ -47,15 +61,6 @@ function AuthPage() {
 
     if (error || !data) throw new Error("College not found.");
     return data.id;
-  }
-
-  async function getNextAnonymousUsername() {
-    const { count, error } = await supabase
-      .from("profiles")
-      .select("id", { count: "exact", head: true });
-
-    if (error) throw error;
-    return `anonymous_${(count || 0) + 1}`;
   }
 
   async function handleLogin() {
@@ -88,16 +93,6 @@ function AuthPage() {
   }
 
   async function handleCreateAccount() {
-    if (!firstName.trim()) {
-      toast.error("Enter your first name.");
-      return;
-    }
-
-    if (!lastName.trim()) {
-      toast.error("Enter your last name.");
-      return;
-    }
-
     if (!normalizedEmail.endsWith(COLLEGE_DOMAIN)) {
       toast.error("Only Chaitanya student emails are allowed.");
       return;
@@ -142,11 +137,17 @@ function AuthPage() {
     try {
       const collegeId = await getCollegeId();
 
-      const { data: existingProfile } = await supabase
-        .from("profiles")
-        .select("anonymous_username, avatar_seed")
-        .eq("id", authData.user.id)
-        .maybeSingle();
+      const { data: assignedUsername, error: usernameError } = await (supabase.rpc as any)(
+        "assign_anonymous_username",
+        {
+          p_user_id: authData.user.id,
+          p_prefix: selectedPrefix,
+        }
+      );
+
+      if (usernameError || !assignedUsername) {
+        throw usernameError || new Error("Could not assign anonymous identity.");
+      }
 
       const { error: profileError } = await supabase.from("profiles").upsert(
         {
@@ -154,9 +155,8 @@ function AuthPage() {
           email: authData.user.email?.toLowerCase(),
           college_id: collegeId,
           verification_status: "verified",
-          anonymous_username:
-            existingProfile?.anonymous_username || (await getNextAnonymousUsername()),
-          avatar_seed: existingProfile?.avatar_seed || "🦊",
+          anonymous_username: assignedUsername as string,
+          avatar_seed: "anonymous-default",
           bio: "",
         },
         { onConflict: "id" }
@@ -164,10 +164,10 @@ function AuthPage() {
 
       if (profileError) throw profileError;
 
-      toast.success("Welcome back to Studentpov.");
+      toast.success("Welcome to Studentpov.");
       navigate({ to: "/communities" });
     } catch (err: any) {
-      toast.error(err.message || "Profile repair failed.");
+      toast.error(err.message || "Profile setup failed.");
     } finally {
       setLoading(false);
     }
@@ -225,31 +225,6 @@ function AuthPage() {
                 mode === "login" ? handleLogin() : handleCreateAccount();
               }}
             >
-              {mode === "create" && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="relative">
-                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <input
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      placeholder="First name"
-                      autoComplete="off"
-                      name="studentpov_first_name"
-                      className={`${inputClass} pl-10`}
-                    />
-                  </div>
-
-                  <input
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Last name"
-                    autoComplete="off"
-                    name="studentpov_last_name"
-                    className={inputClass}
-                  />
-                </div>
-              )}
-
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
@@ -307,25 +282,35 @@ function AuthPage() {
 
                   <div>
                     <p className="mb-2 text-[12px] text-muted-foreground">
-                      Pick avatar
+                      Choose your anonymous identity
                     </p>
 
-                    <div className="grid grid-cols-8 gap-2">
-                      {avatars.map((avatar) => (
-                        <button
-                          key={avatar}
-                          type="button"
-                          onClick={() => setSelectedAvatar(avatar)}
-                          className={`h-10 rounded-xl border text-xl transition ${
-                            selectedAvatar === avatar
-                              ? "border-zinc-500 bg-zinc-900"
-                              : "border-zinc-800 bg-zinc-950/40 hover:bg-zinc-900/40"
-                          }`}
-                        >
-                          {avatar}
-                        </button>
-                      ))}
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={selectedPrefix}
+                        onChange={(e) => setSelectedPrefix(e.target.value)}
+                        className={`${inputClass} appearance-none flex-1`}
+                      >
+                        {anonymousPrefixes.map((prefix) => (
+                          <option key={prefix} value={prefix}>
+                            {prefix}
+                          </option>
+                        ))}
+                      </select>
+
+                      <span className="text-muted-foreground text-sm">-</span>
+
+                      <div className={`${inputClass} flex-1 text-zinc-500`}>
+                        assigned automatically
+                      </div>
                     </div>
+
+                    <p className="mt-3 text-[12px] text-muted-foreground">
+                      Your public identity will appear as:
+                    </p>
+                    <p className="mt-1 text-[14px] text-white font-medium">
+                      {selectedPrefix}-••••
+                    </p>
                   </div>
                 </>
               )}
@@ -353,7 +338,7 @@ function AuthPage() {
               </button>
 
               <p className="text-center text-[11px] text-muted-foreground">
-                Your real name is private. Public identity uses only username and avatar.
+                Your college email stays private. Other students see only your anonymous identity.
               </p>
             </form>
           </div>
