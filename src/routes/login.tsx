@@ -168,10 +168,11 @@ function AuthPage() {
 setAssignedIdentity(assignedUsername as string);
 toast.success("Your anonymous identity is ready.");
     } catch (err: any) {
-      toast.error(err.message || "Profile setup failed.");
-    } finally {
-      setLoading(false);
-    }
+  console.error("ACCOUNT SETUP ERROR:", err);
+  toast.error(err?.message || "Profile setup failed.");
+} finally {
+  setLoading(false);
+}
   }
 
 
