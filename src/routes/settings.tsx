@@ -62,7 +62,7 @@ function SettingsPage() {
               <div className="text-[11px] text-muted-foreground">
                 {profile?.verification_status === "verified"
   ? "Verified student"
-  : "Profile not ready"}
+  : "Profile NOT ready"}
               </div>
             </div>
             <span className="text-[11px] text-muted-foreground/60">
