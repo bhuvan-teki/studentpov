@@ -304,7 +304,11 @@ function CollegeServer() {
 
         {activeChannel === "general-chat" ? (
           <div className="flex-1 min-h-0 flex flex-col">
-            <ChatRoom collegeId={college.id} verified={verified} />
+            <ChatRoom
+  collegeId={college.id}
+  verified={verified}
+  channel={activeChannel}
+/>
           </div>
         ) : (
           <>
