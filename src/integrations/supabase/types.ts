@@ -90,6 +90,7 @@ export type Database = {
       }
       messages: {
         Row: {
+          channel: string
           college_id: string
           content: string
           created_at: string
@@ -97,6 +98,7 @@ export type Database = {
           profile_id: string
         }
         Insert: {
+          channel?: string
           college_id: string
           content: string
           created_at?: string
@@ -104,6 +106,7 @@ export type Database = {
           profile_id: string
         }
         Update: {
+          channel?: string
           college_id?: string
           content?: string
           created_at?: string
