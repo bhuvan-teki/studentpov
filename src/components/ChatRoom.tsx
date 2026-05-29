@@ -18,6 +18,23 @@ type Message = {
   } | null;
 };
 
+type CurrentProfile = {
+  anonymous_username: string | null;
+  verification_status: string | null;
+  college_id: string | null;
+};
+
+const PUBLIC_IDENTITY_PATTERN =
+  /^[a-z]+-[abcdefghjkmnpqrstuvwxyz23456789]{4}$/;
+
+function hasValidPublicIdentity(username?: string | null) {
+  return Boolean(username && PUBLIC_IDENTITY_PATTERN.test(username));
+}
+
+function getPublicIdentity(username?: string | null) {
+  return hasValidPublicIdentity(username) ? username! : "identity-pending";
+}
+
 export function ChatRoom({
   collegeId,
   verified,
@@ -28,12 +45,17 @@ export function ChatRoom({
   channel?: string;
 }) {
   const { user } = useAuth();
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [identityRequired, setIdentityRequired] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let active = true;
+
     const fetchMessages = async () => {
       setLoading(true);
 
@@ -53,13 +75,17 @@ export function ChatRoom({
         `)
         .eq("college_id", collegeId)
         .eq("channel", channel)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (!active) return;
 
       if (error) {
-        toast.error(error.message);
+        console.error("MESSAGES FETCH ERROR:", error);
+        toast.error("Could not load messages.");
         setMessages([]);
       } else {
-        setMessages((data || []) as Message[]);
+        setMessages(((data || []) as Message[]).reverse());
       }
 
       setLoading(false);
@@ -78,44 +104,87 @@ export function ChatRoom({
           filter: `college_id=eq.${collegeId}`,
         },
         async (payload) => {
-          const row = payload.new as Message;
+          if (!active) return;
 
           if (payload.eventType === "INSERT") {
-            if (row.channel !== channel) return;
+            const insertedMessage = payload.new as Message;
 
-            const { data: profileData } = await supabase
-              .from("profiles")
-              .select("anonymous_username, avatar_url, avatar_seed")
-              .eq("id", row.profile_id)
-              .maybeSingle();
+            if (insertedMessage.channel !== channel) return;
 
-            const completeMessage = {
-              ...row,
-              profiles: profileData,
-            };
+            const { data, error } = await supabase
+              .from("messages")
+              .select(`
+                id,
+                content,
+                created_at,
+                profile_id,
+                channel,
+                profiles (
+                  anonymous_username,
+                  avatar_url,
+                  avatar_seed
+                )
+              `)
+              .eq("id", insertedMessage.id)
+              .single();
+
+            if (!active) return;
+
+            if (error || !data) {
+              console.error("REALTIME MESSAGE FETCH ERROR:", error);
+              return;
+            }
 
             setMessages((current) => {
-              if (current.some((m) => m.id === completeMessage.id)) return current;
-              return [...current, completeMessage];
+              if (current.some((message) => message.id === data.id)) {
+                return current;
+              }
+
+              return [...current, data as Message];
             });
           }
 
           if (payload.eventType === "UPDATE") {
-            const updatedMsg = payload.new as Message;
-            if (updatedMsg.channel !== channel) return;
+            const updatedMessage = payload.new as Message;
+
+            if (updatedMessage.channel !== channel) return;
+
+            const { data, error } = await supabase
+              .from("messages")
+              .select(`
+                id,
+                content,
+                created_at,
+                profile_id,
+                channel,
+                profiles (
+                  anonymous_username,
+                  avatar_url,
+                  avatar_seed
+                )
+              `)
+              .eq("id", updatedMessage.id)
+              .single();
+
+            if (!active) return;
+
+            if (error || !data) {
+              console.error("UPDATED MESSAGE FETCH ERROR:", error);
+              return;
+            }
 
             setMessages((current) =>
-              current.map((m) =>
-                m.id === updatedMsg.id ? { ...m, ...updatedMsg } : m
+              current.map((message) =>
+                message.id === data.id ? (data as Message) : message
               )
             );
           }
 
           if (payload.eventType === "DELETE") {
-            const deletedMsg = payload.old as Message;
+            const deletedMessage = payload.old as Message;
 
             setMessages((current) =>
-              current.filter((m) => m.id !== deletedMsg.id)
+              current.filter((message) => message.id !== deletedMessage.id)
             );
           }
         }
@@ -123,9 +192,50 @@ export function ChatRoom({
       .subscribe();
 
     return () => {
+      active = false;
       supabase.removeChannel(chatChannel);
     };
   }, [collegeId, channel]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!user) {
+      setIdentityRequired(false);
+      return;
+    }
+
+    const checkIdentity = async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("anonymous_username, verification_status, college_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!active) return;
+
+      if (error) {
+        console.error("CHATROOM PROFILE FETCH ERROR:", error);
+        setIdentityRequired(false);
+        return;
+      }
+
+      const profile = data as CurrentProfile | null;
+      const identityReady = hasValidPublicIdentity(profile?.anonymous_username);
+      const accountVerified = profile?.verification_status === "verified";
+      const collegeMatches = profile?.college_id === collegeId;
+
+      setIdentityRequired(
+        Boolean(!identityReady || !accountVerified || !collegeMatches)
+      );
+    };
+
+    checkIdentity();
+
+    return () => {
+      active = false;
+    };
+  }, [user, collegeId]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -133,10 +243,20 @@ export function ChatRoom({
     }
   }, [messages]);
 
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const sendMessage = async (event: React.FormEvent) => {
+    event.preventDefault();
 
-    if (!user || !verified) {
+    if (!user) {
+      toast.error("Sign in to send messages.");
+      return;
+    }
+
+    if (identityRequired) {
+      toast.error("Set your anonymous identity before chatting.");
+      return;
+    }
+
+    if (!verified) {
       toast.error("Only verified students can send messages.");
       return;
     }
@@ -154,6 +274,7 @@ export function ChatRoom({
     });
 
     if (error) {
+      console.error("MESSAGE INSERT ERROR:", error);
       toast.error(error.message);
       setNewMessage(messageText);
     }
@@ -165,7 +286,10 @@ export function ChatRoom({
       .delete()
       .eq("id", messageId);
 
-    if (error) toast.error(error.message);
+    if (error) {
+      console.error("MESSAGE DELETE ERROR:", error);
+      toast.error(error.message);
+    }
   };
 
   const editMessage = async (messageId: string, oldContent: string) => {
@@ -180,7 +304,10 @@ export function ChatRoom({
       .update({ content: cleanContent })
       .eq("id", messageId);
 
-    if (error) toast.error(error.message);
+    if (error) {
+      console.error("MESSAGE UPDATE ERROR:", error);
+      toast.error(error.message);
+    }
   };
 
   if (loading) {
@@ -206,10 +333,11 @@ export function ChatRoom({
           </div>
         ) : (
           messages.map((msg, index) => {
+            const previousMessage = messages[index - 1];
             const isConsecutive =
-              index > 0 && messages[index - 1].profile_id === msg.profile_id;
+              index > 0 && previousMessage?.profile_id === msg.profile_id;
 
-            const name = msg.profiles?.anonymous_username || "anonymous";
+            const name = getPublicIdentity(msg.profiles?.anonymous_username);
 
             const timeString = new Date(msg.created_at).toLocaleTimeString(
               "en-IN",
@@ -230,7 +358,11 @@ export function ChatRoom({
                   {!isConsecutive ? (
                     <Avatar
                       url={msg.profiles?.avatar_url}
-                      seed={msg.profiles?.avatar_seed}
+                      seed={
+                        hasValidPublicIdentity(msg.profiles?.anonymous_username)
+                          ? msg.profiles?.avatar_seed || name
+                          : "identity-pending"
+                      }
                       name={name}
                       size={40}
                     />
@@ -281,7 +413,23 @@ export function ChatRoom({
       </div>
 
       <div className="px-4 md:px-6 pb-6 pt-2 bg-background">
-        {verified && user ? (
+        {user && identityRequired ? (
+          <div className="bg-white/[0.06] rounded-lg px-4 py-3 flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Choose your anonymous identity before chatting.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = "/login";
+              }}
+              className="shrink-0 rounded-md bg-primary text-primary-foreground px-3 py-2 text-[12px] font-medium hover:opacity-90 transition"
+            >
+              Set identity
+            </button>
+          </div>
+        ) : verified && user ? (
           <form
             onSubmit={sendMessage}
             className="bg-white/[0.06] rounded-lg p-1.5 pl-4 flex items-center gap-2 focus-within:bg-white/[0.08] transition-colors"
@@ -289,7 +437,7 @@ export function ChatRoom({
             <input
               type="text"
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={(event) => setNewMessage(event.target.value)}
               placeholder={`Message #${channel}`}
               className="flex-1 bg-transparent outline-none text-[15px] py-1.5 placeholder:text-muted-foreground/50"
             />
@@ -304,7 +452,7 @@ export function ChatRoom({
           </form>
         ) : (
           <div className="bg-white/[0.06] rounded-lg px-4 py-3 text-sm text-muted-foreground">
-            You can browse anonymously — sign in with college email to chat.
+            Browse anonymously — sign in with college email to chat.
           </div>
         )}
       </div>
