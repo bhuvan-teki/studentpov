@@ -175,68 +175,83 @@ function AuthPage() {
   }
 
   async function handleCreateAccount() {
-    if (!normalizedEmail.endsWith(COLLEGE_DOMAIN)) {
-      toast.error("Only Chaitanya student emails are allowed.");
-      return;
-    }
+  if (!normalizedEmail.endsWith(COLLEGE_DOMAIN)) {
+    toast.error("Only Chaitanya student emails are allowed.");
+    return;
+  }
 
-    if (password.length < 6) {
-      toast.error("Password must be at least 6 characters.");
-      return;
-    }
+  if (password.length < 6) {
+    toast.error("Password must be at least 6 characters.");
+    return;
+  }
 
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match.");
-      return;
-    }
+  if (password !== confirmPassword) {
+    toast.error("Passwords do not match.");
+    return;
+  }
 
-    setLoading(true);
+  setLoading(true);
 
-    try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: normalizedEmail,
-        password,
-        options: {
-          data: {
-            anonymous_prefix: selectedPrefix,
-            college_slug: COLLEGE_SLUG,
-          },
+  try {
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: {
+        data: {
+          anonymous_prefix: selectedPrefix,
+          college_slug: COLLEGE_SLUG,
         },
-      });
+      },
+    });
 
-      if (authError || !authData.user) {
-        const msg = authError?.message?.toLowerCase() || "";
+    if (authError || !authData.user) {
+      const msg = authError?.message?.toLowerCase() || "";
 
-        if (
-          msg.includes("already registered") ||
-          msg.includes("already exists") ||
-          msg.includes("user already")
-        ) {
-          toast.error("User already registered. Try logging in.");
-          setMode("login");
-          return;
-        }
-
-        throw authError || new Error("Account creation failed.");
-      }
-
-      if (!authData.session) {
-        toast.error(
-          "Account was created, but instant entry is blocked. Turn off Confirm Email in Supabase, then log in."
-        );
+      if (
+        msg.includes("already registered") ||
+        msg.includes("already exists") ||
+        msg.includes("user already")
+      ) {
+        toast.error("User already registered. Try logging in.");
         setMode("login");
         return;
       }
 
-      await assignAndActivateIdentity(authData.user.id);
-      toast.success("Your anonymous identity is ready.");
-    } catch (err: any) {
-      console.error("ACCOUNT SETUP ERROR:", err);
-      toast.error(err?.message || "Profile setup failed.");
-    } finally {
-      setLoading(false);
+      throw authError || new Error("Account creation failed.");
     }
+
+    if (!authData.session) {
+      toast.error(
+        "Account created. Confirm Email is still enabled, so instant entry is blocked."
+      );
+      setMode("login");
+      return;
+    }
+
+    const { data: createdProfile, error: profileError } = await supabase
+      .from("profiles")
+      .select("anonymous_username, verification_status, college_id")
+      .eq("id", authData.user.id)
+      .single();
+
+    if (profileError || !createdProfile?.anonymous_username) {
+      console.error("CREATED PROFILE FETCH ERROR:", profileError);
+      throw profileError || new Error("Profile identity was not created.");
+    }
+
+    if (createdProfile.verification_status !== "verified") {
+      throw new Error("Profile was created but is not verified.");
+    }
+
+    setAssignedIdentity(createdProfile.anonymous_username);
+    toast.success("Your anonymous identity is ready.");
+  } catch (err: any) {
+    console.error("ACCOUNT SETUP ERROR:", err);
+    toast.error(err?.message || "Profile setup failed.");
+  } finally {
+    setLoading(false);
   }
+}
 
   async function handleExistingIdentitySetup() {
     if (!identitySetupUserId) return;
