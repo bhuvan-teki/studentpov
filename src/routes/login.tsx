@@ -140,34 +140,38 @@ function AuthPage() {
     }
 
     try {
-      const collegeId = await getCollegeId();
-      const anonymousUsername = await getNextAnonymousUsername();
+  const collegeId = await getCollegeId();
 
-      const { error: profileError } = await supabase.from("profiles").upsert(
-        {
-          id: authData.user.id,
-          email: normalizedEmail,
-          college_id: collegeId,
-          verification_status: "verified",
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          anonymous_username: anonymousUsername,
-          avatar_seed: selectedAvatar,
-          bio: "",
-        },
-        { onConflict: "id" }
-      );
+  const { data: existingProfile } = await supabase
+    .from("profiles")
+    .select("anonymous_username, avatar_seed, first_name, last_name")
+    .eq("id", data.user.id)
+    .maybeSingle();
 
-      if (profileError) throw profileError;
+  const { error: profileError } = await supabase.from("profiles").upsert(
+    {
+      id: data.user.id,
+      email: data.user.email?.toLowerCase(),
+      college_id: collegeId,
+      verification_status: "verified",
+      anonymous_username: existingProfile?.anonymous_username || await getNextAnonymousUsername(),
+      avatar_seed: existingProfile?.avatar_seed || "🦊",
+      first_name: existingProfile?.first_name || "",
+      last_name: existingProfile?.last_name || "",
+      bio: "",
+    },
+    { onConflict: "id" }
+  );
 
-      toast.success("Account created. Welcome to Studentpov.");
-      navigate({ to: "/communities" });
-    } catch (err: any) {
-      toast.error(err.message || "Profile creation failed.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  if (profileError) throw profileError;
+
+  toast.success("Welcome back to Studentpov.");
+  navigate({ to: "/communities" });
+} catch (err: any) {
+  toast.error(err.message || "Profile repair failed.");
+} finally {
+  setLoading(false);
+}
 
   return (
     <main className="min-h-screen flex flex-col">
