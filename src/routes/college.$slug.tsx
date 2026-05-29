@@ -1,4 +1,3 @@
-```tsx
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Hash, Send, ArrowLeft, Menu, X } from "lucide-react";
@@ -546,4 +545,3 @@ function PostCard({ review }: { review: Review }) {
     </article>
   );
 }
-```
