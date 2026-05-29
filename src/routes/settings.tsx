@@ -60,7 +60,9 @@ function SettingsPage() {
             <div className="flex-1">
               <div className="text-[13px] font-medium">Verification</div>
               <div className="text-[11px] text-muted-foreground">
-                {profile?.verification_status === "verified" ? "Verified student" : "Pending"}
+                {profile?.verification_status === "verified"
+  ? "Verified student"
+  : "Profile not ready"}
               </div>
             </div>
             <span className="text-[11px] text-muted-foreground/60">
