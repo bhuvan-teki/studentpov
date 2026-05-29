@@ -184,23 +184,23 @@ function CollegeServer() {
     if (composer.trim().length < 2) return;
     if (!college) return;
     
-    const { data, error } = await supabase
-      .from("reviews")
-      .insert({
-        user_id: user.id,
-        college_id: college.id,
-        channel: activeChannel,
-        content: composer.trim(),
-        branch: "Anonymous",
-        year: "Student",
-      })
-      .select()
-      .single();
-      
-    if (error) { toast.error(error.message); return; }
-    
-    setReviews((r) => [...r, data as Review]);
-    setComposer("");
+    const { error } = await supabase
+  .from("reviews")
+  .insert({
+    user_id: user.id,
+    college_id: college.id,
+    channel: activeChannel,
+    content: composer.trim(),
+    branch: "Anonymous",
+    year: "Student",
+  });
+
+if (error) {
+  toast.error(error.message);
+  return;
+}
+
+setComposer("");
   };
 
   const initials = useMemo(
