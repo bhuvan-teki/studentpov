@@ -135,9 +135,11 @@ function AuthPage() {
       });
 
       if (error || !data.user) {
-        toast.error("Wrong email or password.");
-        return;
-      }
+  console.error("LOGIN AUTH ERROR:", error);
+  setLoading(false);
+  toast.error(error?.message || "Login failed.");
+  return;
+}
 
       const collegeId = await getCollegeId();
 
