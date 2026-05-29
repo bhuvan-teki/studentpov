@@ -86,22 +86,29 @@ function CollegeServer() {
 
     // 1. Initial Data Fetch
     const fetchReviews = async () => {
-      const { data } = await supabase
-        .from("reviews")
-.select(`
-  *,
-  profiles (
-    anonymous_username,
-    avatar_url,
-    avatar_seed
-  )
-`)
-        .eq("college_id", college.id)
-        .eq("channel", activeChannel)
-        .order("created_at", { ascending: true })
-        .limit(50);
-      setReviews((data ?? []) as Review[]);
-    };
+  const { data, error } = await supabase
+    .from("reviews")
+    .select(`
+      *,
+      profiles (
+        anonymous_username,
+        avatar_url,
+        avatar_seed
+      )
+    `)
+    .eq("college_id", college.id)
+    .eq("channel", activeChannel)
+    .order("created_at", { ascending: true })
+    .limit(50);
+
+  if (error) {
+    console.error("REVIEWS FETCH ERROR:", error);
+    toast.error("Could not load posts");
+    return;
+  }
+
+  setReviews((data ?? []) as Review[]);
+};
 
     fetchReviews();
 
