@@ -1,3 +1,4 @@
+```tsx
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Hash, Send, ArrowLeft, Menu, X } from "lucide-react";
@@ -21,8 +22,6 @@ type Review = {
   user_id: string;
   channel: string;
   content: string;
-  branch: string | null;
-  year: string | null;
   created_at: string;
   profiles?: {
     anonymous_username?: string | null;
@@ -30,6 +29,23 @@ type Review = {
     avatar_seed?: string | null;
   } | null;
 };
+
+type CurrentProfile = {
+  anonymous_username: string | null;
+  verification_status: string | null;
+  college_id: string | null;
+};
+
+const PUBLIC_IDENTITY_PATTERN =
+  /^[a-z]+-[abcdefghjkmnpqrstuvwxyz23456789]{4}$/;
+
+function hasValidPublicIdentity(username?: string | null) {
+  return Boolean(username && PUBLIC_IDENTITY_PATTERN.test(username));
+}
+
+function getPublicIdentity(username?: string | null) {
+  return hasValidPublicIdentity(username) ? username! : "identity-pending";
+}
 
 const CHANNEL_GROUPS: { label: string; channels: string[] }[] = [
   { label: "Start Here", channels: ["welcome", "ask-seniors", "college-overview"] },
@@ -48,7 +64,10 @@ export const Route = createFileRoute("/college/$slug")({
   head: ({ params }) => ({
     meta: [
       { title: `${params.slug} community — Studentpov` },
-      { name: "description", content: "Verified student discussions, anonymous and honest." },
+      {
+        name: "description",
+        content: "Verified student discussions with private public identities.",
+      },
     ],
   }),
   component: CollegeServer,
@@ -58,62 +77,86 @@ function CollegeServer() {
   const { slug } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+
   const [college, setCollege] = useState<College | null>(null);
   const [activeChannel, setActiveChannel] = useState("welcome");
   const [reviews, setReviews] = useState<Review[]>([]);
   const [verified, setVerified] = useState(false);
+  const [identityRequired, setIdentityRequired] = useState(false);
   const [composer, setComposer] = useState("");
   const [loading, setLoading] = useState(true);
   const [navOpen, setNavOpen] = useState(false);
 
-  // Fetch College Details
+  // Fetch college details.
   useEffect(() => {
     let alive = true;
+
     (async () => {
-      const { data: c } = await supabase
-        .from("colleges").select("*").eq("slug", slug).maybeSingle();
+      const { data, error } = await supabase
+        .from("colleges")
+        .select("*")
+        .eq("slug", slug)
+        .maybeSingle();
+
       if (!alive) return;
-      if (!c) { navigate({ to: "/communities" }); return; }
-      setCollege(c as College);
+
+      if (error || !data) {
+        console.error("COLLEGE FETCH ERROR:", error);
+        navigate({ to: "/communities" });
+        return;
+      }
+
+      setCollege(data as College);
       setLoading(false);
     })();
-    return () => { alive = false; };
+
+    return () => {
+      alive = false;
+    };
   }, [slug, navigate]);
 
-  // REAL-TIME POST FETCHING
+  // Load reviews and subscribe to new review posts.
   useEffect(() => {
     if (!college) return;
 
-    // 1. Initial Data Fetch
+    let active = true;
+    setReviews([]);
+
     const fetchReviews = async () => {
-  const { data, error } = await supabase
-    .from("reviews")
-    .select(`
-      *,
-      profiles (
-        anonymous_username,
-        avatar_url,
-        avatar_seed
-      )
-    `)
-    .eq("college_id", college.id)
-    .eq("channel", activeChannel)
-    .order("created_at", { ascending: false })
-    .limit(50);
+      const { data, error } = await supabase
+        .from("reviews")
+        .select(`
+          id,
+          user_id,
+          channel,
+          content,
+          created_at,
+          profiles (
+            anonymous_username,
+            avatar_url,
+            avatar_seed
+          )
+        `)
+        .eq("college_id", college.id)
+        .eq("channel", activeChannel)
+        .order("created_at", { ascending: false })
+        .limit(50);
 
-  if (error) {
-    console.error("REVIEWS FETCH ERROR:", error);
-    toast.error("Could not load posts");
-    return;
-  }
+      if (!active) return;
 
-  setReviews(((data ?? []) as Review[]).reverse());
-};
+      if (error) {
+        console.error("REVIEWS FETCH ERROR:", error);
+        toast.error("Could not load posts.");
+        return;
+      }
+
+      setReviews(((data ?? []) as Review[]).reverse());
+    };
+
     fetchReviews();
 
-    // 2. Real-Time WebSocket Subscription
-    const channelSubscription = supabase
-      .channel(`public:reviews:${college.id}`)
+    const reviewSubscription = supabase
+      .channel(`public:reviews:${college.id}:${activeChannel}`)
       .on(
         "postgres_changes",
         {
@@ -123,99 +166,150 @@ function CollegeServer() {
           filter: `college_id=eq.${college.id}`,
         },
         async (payload) => {
-  const newReview = payload.new as Review;
+          const insertedReview = payload.new as Review;
 
-  if (newReview.channel !== activeChannel) return;
+          if (insertedReview.channel !== activeChannel) return;
 
-  const { data, error } = await supabase
-    .from("reviews")
-    .select(`
-      *,
-      profiles (
-        anonymous_username,
-        avatar_url,
-        avatar_seed
-      )
-    `)
-    .eq("id", newReview.id)
-    .single();
+          const { data, error } = await supabase
+            .from("reviews")
+            .select(`
+              id,
+              user_id,
+              channel,
+              content,
+              created_at,
+              profiles (
+                anonymous_username,
+                avatar_url,
+                avatar_seed
+              )
+            `)
+            .eq("id", insertedReview.id)
+            .single();
 
-  if (error || !data) {
-    console.error("REALTIME REVIEW FETCH ERROR:", error);
-    return;
-  }
+          if (!active) return;
 
-  setReviews((current) => {
-    if (current.some((r) => r.id === data.id)) return current;
-    return [...current, data as Review];
-  });
-}
+          if (error || !data) {
+            console.error("REALTIME REVIEW FETCH ERROR:", error);
+            return;
+          }
+
+          setReviews((current) => {
+            if (current.some((review) => review.id === data.id)) {
+              return current;
+            }
+
+            return [...current, data as Review];
+          });
+        }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channelSubscription);
+      active = false;
+      supabase.removeChannel(reviewSubscription);
     };
   }, [college, activeChannel]);
 
-  // SECURE: Check Verification Status AND Correct College Match
+  // A user may post only when they belong to the college,
+  // are verified, and have the new anonymous identity format.
   useEffect(() => {
-    if (!user || !college) { 
-      setVerified(false); 
-      return; 
+    let active = true;
+
+    if (!user || !college) {
+      setVerified(false);
+      setIdentityRequired(false);
+      return;
     }
-    
-    supabase
-      .from("profiles")
-      .select("verification_status, college_id")
-      .eq("id", user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        setVerified(
-          data?.verification_status === "verified" && 
-          data?.college_id === college.id
-        );
-      });
+
+    (async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("anonymous_username, verification_status, college_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!active) return;
+
+      if (error) {
+        console.error("CURRENT PROFILE FETCH ERROR:", error);
+        setVerified(false);
+        setIdentityRequired(false);
+        return;
+      }
+
+      const profile = data as CurrentProfile | null;
+      const identityReady = hasValidPublicIdentity(profile?.anonymous_username);
+      const collegeMatches = profile?.college_id === college.id;
+      const accountVerified = profile?.verification_status === "verified";
+
+      setIdentityRequired(!identityReady);
+      setVerified(Boolean(identityReady && collegeMatches && accountVerified));
+    })();
+
+    return () => {
+      active = false;
+    };
   }, [user, college]);
 
   const post = async () => {
-    if (!user) { toast.error("Sign in to post"); return; }
-    if (!verified) { toast.error("Only verified students of this college can post"); return; }
-    if (composer.trim().length < 2) return;
-    if (!college) return;
-    
-    const { error } = await supabase
-  .from("reviews")
-  .insert({
-    user_id: user.id,
-    college_id: college.id,
-    channel: activeChannel,
-    content: composer.trim(),
-    branch: "Anonymous",
-    year: "Student",
-  });
+    if (!user) {
+      toast.error("Sign in to post.");
+      return;
+    }
 
-if (error) {
-  toast.error(error.message);
-  return;
-}
+    if (identityRequired) {
+      toast.error("Set your anonymous identity before posting.");
+      return;
+    }
 
-setComposer("");
+    if (!verified) {
+      toast.error("Only verified students of this college can post.");
+      return;
+    }
+
+    if (!college || composer.trim().length < 2) return;
+
+    const message = composer.trim();
+    setComposer("");
+
+    const { error } = await supabase.from("reviews").insert({
+      user_id: user.id,
+      college_id: college.id,
+      channel: activeChannel,
+      content: message,
+    });
+
+    if (error) {
+      console.error("POST INSERT ERROR:", error);
+      toast.error(error.message);
+      setComposer(message);
+    }
   };
 
   const initials = useMemo(
-    () => college?.name.split(" ").slice(0, 2).map((s) => s[0]).join("") ?? "",
-    [college],
+    () =>
+      college?.name
+        .split(" ")
+        .slice(0, 2)
+        .map((word) => word[0])
+        .join("") ?? "",
+    [college]
   );
 
-  if (loading || !college) {
-    return <div className="min-h-screen grid place-items-center text-muted-foreground text-sm">Loading community…</div>;
-  }
-
-  const selectChannel = (ch: string) => {
-    setActiveChannel(ch);
+  const selectChannel = (channel: string) => {
+    setActiveChannel(channel);
+    setComposer("");
     setNavOpen(false);
   };
+
+  if (loading || !college) {
+    return (
+      <div className="min-h-screen grid place-items-center text-muted-foreground text-sm">
+        Loading community…
+      </div>
+    );
+  }
 
   const Sidebar = (
     <div className="h-full flex flex-col bg-black/60 md:bg-black/40">
@@ -223,10 +317,14 @@ setComposer("");
         <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-white/20 to-white/5 border border-white/10 grid place-items-center text-[12px] font-semibold">
           {initials}
         </div>
+
         <div className="min-w-0 flex-1">
           <div className="text-[13px] font-semibold truncate">{college.name}</div>
-          <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">Server</div>
+          <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">
+            Server
+          </div>
         </div>
+
         <button
           onClick={() => setNavOpen(false)}
           className="md:hidden h-8 w-8 grid place-items-center text-muted-foreground hover:text-foreground"
@@ -237,26 +335,28 @@ setComposer("");
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-3 space-y-5">
-        {CHANNEL_GROUPS.map((g) => (
-          <div key={g.label}>
+        {CHANNEL_GROUPS.map((group) => (
+          <div key={group.label}>
             <div className="px-2 mb-1.5 text-[10px] uppercase tracking-[0.16em] text-muted-foreground/60">
-              {g.label}
+              {group.label}
             </div>
+
             <div>
-              {g.channels.map((ch) => {
-                const active = ch === activeChannel;
+              {group.channels.map((channel) => {
+                const selected = channel === activeChannel;
+
                 return (
                   <button
-                    key={ch}
-                    onClick={() => selectChannel(ch)}
+                    key={channel}
+                    onClick={() => selectChannel(channel)}
                     className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition ${
-                      active
+                      selected
                         ? "bg-white/[0.06] text-foreground"
                         : "text-muted-foreground hover:text-foreground hover:bg-white/[0.03]"
                     }`}
                   >
                     <Hash className="h-3.5 w-3.5 opacity-70" />
-                    <span className="truncate">{ch}</span>
+                    <span className="truncate">{channel}</span>
                   </button>
                 );
               })}
@@ -269,7 +369,6 @@ setComposer("");
 
   return (
     <div className="h-screen flex flex-col md:flex-row bg-background text-foreground overflow-hidden">
-      {/* Mobile top bar */}
       <div className="md:hidden h-14 shrink-0 px-3 border-b border-white/[0.04] flex items-center gap-2 bg-black/40 backdrop-blur">
         <button
           onClick={() => navigate({ to: "/communities" })}
@@ -277,9 +376,11 @@ setComposer("");
         >
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
+
         <div className="flex-1 min-w-0 text-center">
           <div className="text-[13px] font-semibold truncate">{college.name}</div>
         </div>
+
         <button
           onClick={() => setNavOpen(true)}
           className="h-9 w-9 grid place-items-center rounded-lg text-foreground/90 hover:bg-white/[0.05] transition"
@@ -289,7 +390,6 @@ setComposer("");
         </button>
       </div>
 
-      {/* DESKTOP SIDEBAR */}
       <aside className="hidden md:flex w-[260px] shrink-0 border-r border-white/[0.04] flex-col">
         <button
           onClick={() => navigate({ to: "/communities" })}
@@ -297,28 +397,30 @@ setComposer("");
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Back to communities
         </button>
+
         <div className="flex-1 min-h-0 mt-3">{Sidebar}</div>
       </aside>
 
-      {/* MOBILE SIDEBAR (drawer) */}
       {navOpen && (
         <>
           <div
             className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
             onClick={() => setNavOpen(false)}
           />
+
           <aside className="md:hidden fixed inset-y-0 left-0 w-[280px] z-50 border-r border-white/[0.06] bg-background">
             {Sidebar}
           </aside>
         </>
       )}
 
-      {/* CENTER FEED */}
       <main className="flex-1 flex flex-col min-w-0">
         <div className="hidden md:flex h-14 px-6 border-b border-white/[0.04] items-center gap-3">
           <Hash className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-[14px] font-semibold">{activeChannel}</h2>
-          <span className="text-[12px] text-muted-foreground/70">· anonymous & verified</span>
+          <span className="text-[12px] text-muted-foreground/70">
+            · verified students with private identities
+          </span>
         </div>
 
         <div className="md:hidden px-4 py-3 border-b border-white/[0.04] flex items-center gap-2">
@@ -329,53 +431,74 @@ setComposer("");
         {activeChannel === "general-chat" ? (
           <div className="flex-1 min-h-0 flex flex-col">
             <ChatRoom
-  collegeId={college.id}
-  verified={verified}
-  channel={activeChannel}
-/>
+              collegeId={college.id}
+              verified={verified}
+              channel={activeChannel}
+            />
           </div>
         ) : (
           <>
             <div className="flex-1 overflow-y-auto py-4 flex flex-col">
               {reviews.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
-                  <div className="text-[15px] font-medium text-foreground">No posts yet in #{activeChannel}</div>
+                  <div className="text-[15px] font-medium text-foreground">
+                    No posts yet in #{activeChannel}
+                  </div>
+
                   <div className="text-[13px] text-muted-foreground mt-1">
-                    Be the first verified student to share the truth.
+                    Be the first verified student to share your experience.
                   </div>
                 </div>
               ) : (
-                // Added a flex container to keep the flow correct with the new flat cards
                 <div className="flex flex-col gap-1">
-                  {reviews.map((r) => <PostCard key={r.id} review={r} />)}
+                  {reviews.map((review) => (
+                    <PostCard key={review.id} review={review} />
+                  ))}
                 </div>
               )}
             </div>
 
             <div className="px-4 md:px-6 pb-4 md:pb-6 pt-2">
-              <div className="bg-white/[0.06] rounded-xl p-1.5 pl-4 flex items-center gap-2 focus-within:bg-white/[0.08] transition-colors border border-white/[0.08]">
-                <textarea
-                  value={composer}
-                  onChange={(e) => setComposer(e.target.value)}
-                  rows={1}
-                  placeholder={
-                    verified
-                      ? `Message #${activeChannel}…`
-                      : user 
-                        ? "Your college verification is pending, or you belong to a different college."
-                        : "You can browse anonymously — sign in with college email to post."
-                  }
-                  disabled={!verified}
-                  className="flex-1 bg-transparent outline-none resize-none text-[15px] py-1.5 placeholder:text-muted-foreground/50 disabled:cursor-not-allowed"
-                />
-                <button
-                  onClick={post}
-                  disabled={!verified || !composer.trim()}
-                  className="h-9 w-9 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center text-primary disabled:opacity-30 hover:bg-primary/20 transition-colors"
-                >
-                  <Send className="h-4 w-4" />
-                </button>
-              </div>
+              {user && identityRequired ? (
+                <div className="bg-white/[0.06] rounded-xl px-4 py-3 flex items-center justify-between gap-3 border border-white/[0.08]">
+                  <p className="text-[13px] text-muted-foreground">
+                    Choose your anonymous identity before posting.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => navigate({ to: "/login" })}
+                    className="shrink-0 rounded-lg bg-primary text-primary-foreground px-3 py-2 text-[12px] font-medium hover:opacity-90 transition"
+                  >
+                    Set identity
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-white/[0.06] rounded-xl p-1.5 pl-4 flex items-center gap-2 focus-within:bg-white/[0.08] transition-colors border border-white/[0.08]">
+                  <textarea
+                    value={composer}
+                    onChange={(event) => setComposer(event.target.value)}
+                    rows={1}
+                    placeholder={
+                      verified
+                        ? `Message #${activeChannel}…`
+                        : user
+                          ? "Only verified students of this college can post."
+                          : "Browse anonymously — sign in with college email to post."
+                    }
+                    disabled={!verified}
+                    className="flex-1 bg-transparent outline-none resize-none text-[15px] py-1.5 placeholder:text-muted-foreground/50 disabled:cursor-not-allowed"
+                  />
+
+                  <button
+                    onClick={post}
+                    disabled={!verified || !composer.trim()}
+                    className="h-9 w-9 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center text-primary disabled:opacity-30 hover:bg-primary/20 transition-colors"
+                  >
+                    <Send className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -385,12 +508,15 @@ setComposer("");
 }
 
 function PostCard({ review }: { review: Review }) {
-  const name = review.profiles?.anonymous_username || "anonymous";
+  const name = getPublicIdentity(review.profiles?.anonymous_username);
+
   return (
     <article className="group flex gap-3 px-4 md:px-6 py-2 hover:bg-white/[0.035] transition">
       <Avatar
         url={review.profiles?.avatar_url}
-        seed={review.profiles?.avatar_seed}
+        seed={hasValidPublicIdentity(review.profiles?.anonymous_username)
+          ? review.profiles?.avatar_seed || name
+          : "identity-pending"}
         name={name}
         size={36}
         className="mt-0.5"
@@ -398,9 +524,10 @@ function PostCard({ review }: { review: Review }) {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <span className="text-[15px] font-medium text-foreground hover:underline cursor-pointer">
+          <span className="text-[15px] font-medium text-foreground">
             {name}
           </span>
+
           <span className="text-[11px] text-muted-foreground">
             {new Date(review.created_at).toLocaleString("en-IN", {
               day: "2-digit",
@@ -419,3 +546,4 @@ function PostCard({ review }: { review: Review }) {
     </article>
   );
 }
+```
