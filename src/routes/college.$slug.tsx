@@ -122,16 +122,34 @@ function CollegeServer() {
           table: "reviews",
           filter: `college_id=eq.${college.id}`,
         },
-        (payload) => {
-          const newReview = payload.new as Review;
-          
-          if (newReview.channel === activeChannel) {
-            setReviews((current) => {
-              if (current.some((r) => r.id === newReview.id)) return current;
-              return [...current, newReview];
-            });
-          }
-        }
+        async (payload) => {
+  const newReview = payload.new as Review;
+
+  if (newReview.channel !== activeChannel) return;
+
+  const { data, error } = await supabase
+    .from("reviews")
+    .select(`
+      *,
+      profiles (
+        anonymous_username,
+        avatar_url,
+        avatar_seed
+      )
+    `)
+    .eq("id", newReview.id)
+    .single();
+
+  if (error || !data) {
+    console.error("REALTIME REVIEW FETCH ERROR:", error);
+    return;
+  }
+
+  setReviews((current) => {
+    if (current.some((r) => r.id === data.id)) return current;
+    return [...current, data as Review];
+  });
+}
       )
       .subscribe();
 
