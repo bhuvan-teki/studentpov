@@ -98,7 +98,7 @@ function CollegeServer() {
     `)
     .eq("college_id", college.id)
     .eq("channel", activeChannel)
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(50);
 
   if (error) {
@@ -107,9 +107,8 @@ function CollegeServer() {
     return;
   }
 
-  setReviews((data ?? []) as Review[]);
+  setReviews(((data ?? []) as Review[]).reverse());
 };
-
     fetchReviews();
 
     // 2. Real-Time WebSocket Subscription
