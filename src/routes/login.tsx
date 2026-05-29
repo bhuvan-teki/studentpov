@@ -48,6 +48,7 @@ function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [selectedPrefix, setSelectedPrefix] = useState("lunarglow");
+  const [assignedIdentity, setAssignedIdentity] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const normalizedEmail = email.trim().toLowerCase();
