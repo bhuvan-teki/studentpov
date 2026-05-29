@@ -165,8 +165,8 @@ function AuthPage() {
 
       if (profileError) throw profileError;
 
-      toast.success("Welcome to Studentpov.");
-      navigate({ to: "/communities" });
+setAssignedIdentity(assignedUsername as string);
+toast.success("Your anonymous identity is ready.");
     } catch (err: any) {
       toast.error(err.message || "Profile setup failed.");
     } finally {
