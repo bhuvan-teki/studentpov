@@ -30,7 +30,7 @@ const anonymousPrefixes = [
   "opalgleam", "opaldusk", "opalhaze", "opaldrift", "opalglow", "opalwave",
   "radiantgleam", "radiantdusk", "radianthaze", "radiantdrift", "radiantglow", "radiantwave",
   "softgleam", "softdusk", "softhaze", "softdrift", "softglow", "softwave",
-  "quietgleam", "quietdusk", "quiethaze", "quietdrift", "quietglow", "quietwave"
+  "quietgleam", "quietdusk", "quiethaze", "quietdrift", "quietglow", "quietwave",
 ];
 
 const inputClass =
@@ -47,8 +47,14 @@ function AuthPage() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [selectedPrefix, setSelectedPrefix] = useState("lunarglow");
   const [assignedIdentity, setAssignedIdentity] = useState<string | null>(null);
+
+  // Used when an old or broken account logs in with:
+  // null username, pending verification, or anonymous_3 style username.
+  const [identitySetupUserId, setIdentitySetupUserId] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(false);
 
   const normalizedEmail = email.trim().toLowerCase();
@@ -60,8 +66,53 @@ function AuthPage() {
       .eq("slug", COLLEGE_SLUG)
       .single();
 
-    if (error || !data) throw new Error("College not found.");
+    if (error || !data) {
+      throw new Error("College not found.");
+    }
+
     return data.id;
+  }
+
+  async function assignAndActivateIdentity(userId: string) {
+    const collegeId = await getCollegeId();
+
+    const { data: assignedUsername, error: usernameError } = await (supabase.rpc as any)(
+      "assign_anonymous_username",
+      {
+        p_user_id: userId,
+        p_prefix: selectedPrefix,
+      }
+    );
+
+    if (usernameError || !assignedUsername) {
+      console.error("USERNAME ASSIGNMENT ERROR:", usernameError);
+      throw usernameError || new Error("Could not assign anonymous identity.");
+    }
+
+    const finalUsername = assignedUsername as string;
+
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .upsert(
+        {
+          id: userId,
+          email: normalizedEmail,
+          college_id: collegeId,
+          verification_status: "verified",
+          anonymous_username: finalUsername,
+          avatar_seed: "anonymous-default",
+          bio: "",
+        },
+        { onConflict: "id" }
+      );
+
+    if (profileError) {
+      console.error("PROFILE UPDATE ERROR:", profileError);
+      throw profileError;
+    }
+
+    setIdentitySetupUserId(null);
+    setAssignedIdentity(finalUsername);
   }
 
   async function handleLogin() {
@@ -77,20 +128,50 @@ function AuthPage() {
 
     setLoading(true);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: normalizedEmail,
-      password,
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
 
-    if (error || !data.user) {
+      if (error || !data.user) {
+        toast.error("Wrong email or password.");
+        return;
+      }
+
+      const collegeId = await getCollegeId();
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("anonymous_username, verification_status, college_id")
+        .eq("id", data.user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error("PROFILE FETCH ERROR:", profileError);
+        throw profileError;
+      }
+
+      const missingUsername = !profile?.anonymous_username;
+      const oldUsername = profile?.anonymous_username?.startsWith("anonymous_");
+      const notVerified = profile?.verification_status !== "verified";
+      const wrongCollege = profile?.college_id !== collegeId;
+
+      if (missingUsername || oldUsername || notVerified || wrongCollege) {
+        setIdentitySetupUserId(data.user.id);
+        setSelectedPrefix("lunarglow");
+        toast.info("Choose your anonymous identity to continue.");
+        return;
+      }
+
+      toast.success("Welcome back to Studentpov.");
+      navigate({ to: "/communities" });
+    } catch (err: any) {
+      console.error("LOGIN ERROR:", err);
+      toast.error(err?.message || "Login failed.");
+    } finally {
       setLoading(false);
-      toast.error("Wrong email or password.");
-      return;
     }
-
-    toast.success("Welcome back to Studentpov.");
-    setLoading(false);
-    navigate({ to: "/communities" });
   }
 
   async function handleCreateAccount() {
@@ -111,73 +192,76 @@ function AuthPage() {
 
     setLoading(true);
 
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password,
-    });
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: {
+          data: {
+            anonymous_prefix: selectedPrefix,
+            college_slug: COLLEGE_SLUG,
+          },
+        },
+      });
 
-    if (authError || !authData.user) {
-      setLoading(false);
+      if (authError || !authData.user) {
+        const msg = authError?.message?.toLowerCase() || "";
 
-      const msg = authError?.message?.toLowerCase() || "";
+        if (
+          msg.includes("already registered") ||
+          msg.includes("already exists") ||
+          msg.includes("user already")
+        ) {
+          toast.error("User already registered. Try logging in.");
+          setMode("login");
+          return;
+        }
 
-      if (
-        msg.includes("already registered") ||
-        msg.includes("already exists") ||
-        msg.includes("user already")
-      ) {
-        toast.error("User already registered. Try logging in.");
+        throw authError || new Error("Account creation failed.");
+      }
+
+      if (!authData.session) {
+        toast.error(
+          "Account was created, but instant entry is blocked. Turn off Confirm Email in Supabase, then log in."
+        );
         setMode("login");
         return;
       }
 
-      toast.error(authError?.message || "Account creation failed.");
-      return;
-    }
-
-    try {
-      const collegeId = await getCollegeId();
-
-      const { data: assignedUsername, error: usernameError } = await (supabase.rpc as any)(
-        "assign_anonymous_username",
-        {
-          p_user_id: authData.user.id,
-          p_prefix: selectedPrefix,
-        }
-      );
-
-      if (usernameError || !assignedUsername) {
-        throw usernameError || new Error("Could not assign anonymous identity.");
-      }
-
-      const { error: profileError } = await supabase.from("profiles").upsert(
-        {
-          id: authData.user.id,
-          email: authData.user.email?.toLowerCase(),
-          college_id: collegeId,
-          verification_status: "verified",
-          anonymous_username: assignedUsername as string,
-          avatar_seed: "anonymous-default",
-          bio: "",
-        },
-        { onConflict: "id" }
-      );
-
-      if (profileError) throw profileError;
-
-setAssignedIdentity(assignedUsername as string);
-toast.success("Your anonymous identity is ready.");
+      await assignAndActivateIdentity(authData.user.id);
+      toast.success("Your anonymous identity is ready.");
     } catch (err: any) {
-  console.error("ACCOUNT SETUP ERROR:", err);
-  toast.error(err?.message || "Profile setup failed.");
-} finally {
-  setLoading(false);
-}
+      console.error("ACCOUNT SETUP ERROR:", err);
+      toast.error(err?.message || "Profile setup failed.");
+    } finally {
+      setLoading(false);
+    }
   }
 
+  async function handleExistingIdentitySetup() {
+    if (!identitySetupUserId) return;
+
+    setLoading(true);
+
+    try {
+      await assignAndActivateIdentity(identitySetupUserId);
+      toast.success("Your anonymous identity is ready.");
+    } catch (err: any) {
+      console.error("IDENTITY SETUP ERROR:", err);
+      toast.error(err?.message || "Could not activate your identity.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function chooseMode(nextMode: Mode) {
+    setMode(nextMode);
+    setIdentitySetupUserId(null);
+    setAssignedIdentity(null);
+    setConfirmPassword("");
+  }
 
   return (
-
     <main className="min-h-screen flex flex-col">
       <TopNav rightSlot={<LiveCount />} />
 
@@ -193,183 +277,250 @@ toast.success("Your anonymous identity is ready.");
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 mb-6 text-[12px]">
-              <button
-                type="button"
-                onClick={() => setMode("login")}
-                className={`rounded-xl py-2 border transition ${
-                  mode === "login"
-                    ? "bg-zinc-900/80 border-zinc-700 text-white"
-                    : "bg-zinc-950/40 border-zinc-800 text-zinc-500"
-                }`}
-              >
-                Login
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setMode("create")}
-                className={`rounded-xl py-2 border transition ${
-                  mode === "create"
-                    ? "bg-zinc-900/80 border-zinc-700 text-white"
-                    : "bg-zinc-950/40 border-zinc-800 text-zinc-500"
-                }`}
-              >
-                Create
-              </button>
-            </div>
-
-            {assignedIdentity ? (
-  <div className="space-y-4 text-center">
-    <p className="text-[12px] text-muted-foreground">
-      Your anonymous identity
-    </p>
-
-    <div className="rounded-2xl bg-zinc-950/80 border border-white/[0.06] px-4 py-4 text-[18px] font-medium text-white">
-      {assignedIdentity}
-    </div>
-
-    <p className="text-[12px] text-muted-foreground">
-      Other students will see this name when you post.
-    </p>
-
-    <button
-      type="button"
-      onClick={() => navigate({ to: "/communities" })}
-      className="w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-medium hover:opacity-90 transition flex items-center justify-center gap-2"
-    >
-      Enter Community <ArrowRight className="h-4 w-4" />
-    </button>
-  </div>
-) : (
-  <form
-    className="space-y-3"
-    autoComplete="off"
-    onSubmit={(e) => {
-      e.preventDefault();
-      mode === "login" ? handleLogin() : handleCreateAccount();
-    }}
-  >
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="student@chaitanya.edu.in"
-                  autoComplete="off"
-                  name="studentpov_college_email"
-                  className={`${inputClass} pl-10`}
-                />
-              </div>
-
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={mode === "login" ? "Password" : "Create password"}
-                  autoComplete={mode === "login" ? "current-password" : "new-password"}
-                  name="studentpov_password"
-                  className={`${inputClass} pl-10 pr-11`}
-                />
+            {!assignedIdentity && !identitySetupUserId && (
+              <div className="grid grid-cols-2 gap-2 mb-6 text-[12px]">
                 <button
                   type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => chooseMode("login")}
+                  className={`rounded-xl py-2 border transition ${
+                    mode === "login"
+                      ? "bg-zinc-900/80 border-zinc-700 text-white"
+                      : "bg-zinc-950/40 border-zinc-800 text-zinc-500"
+                  }`}
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  Login
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => chooseMode("create")}
+                  className={`rounded-xl py-2 border transition ${
+                    mode === "create"
+                      ? "bg-zinc-900/80 border-zinc-700 text-white"
+                      : "bg-zinc-950/40 border-zinc-800 text-zinc-500"
+                  }`}
+                >
+                  Create
                 </button>
               </div>
+            )}
 
-              {mode === "create" && (
-                <>
-                  <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <input
-                      type={showConfirmPassword ? "text" : "password"}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Re-enter password"
-                      autoComplete="new-password"
-                      name="studentpov_confirm_password"
-                      className={`${inputClass} pl-10 pr-11`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword((v) => !v)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
+            {assignedIdentity ? (
+              <div className="space-y-4 text-center">
+                <p className="text-[12px] text-muted-foreground">
+                  Your anonymous identity
+                </p>
 
-                  <div>
-                    <p className="mb-2 text-[12px] text-muted-foreground">
-                      Choose your anonymous identity
-                    </p>
+                <div className="rounded-2xl bg-zinc-950/80 border border-white/[0.06] px-4 py-4 text-[18px] font-medium text-white">
+                  {assignedIdentity}
+                </div>
 
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={selectedPrefix}
-                        onChange={(e) => setSelectedPrefix(e.target.value)}
-                        className={`${inputClass} appearance-none flex-1`}
+                <p className="text-[12px] text-muted-foreground">
+                  Other students will see this name when you post.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => navigate({ to: "/communities" })}
+                  className="w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-medium hover:opacity-90 transition flex items-center justify-center gap-2"
+                >
+                  Enter Community <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            ) : identitySetupUserId ? (
+              <div className="space-y-4">
+                <div className="text-center mb-5">
+                  <h2 className="text-[18px] font-medium text-white">
+                    Set your anonymous identity
+                  </h2>
+                  <p className="mt-2 text-[12px] text-muted-foreground">
+                    Your account needs a public anonymous name before you can post.
+                  </p>
+                </div>
+
+                <IdentityPicker
+                  selectedPrefix={selectedPrefix}
+                  onChange={setSelectedPrefix}
+                />
+
+                <button
+                  type="button"
+                  onClick={handleExistingIdentitySetup}
+                  disabled={loading}
+                  className="w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      Activate Identity <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => chooseMode("login")}
+                  className="w-full rounded-xl border border-white/[0.08] bg-transparent py-3 text-sm text-foreground/85 hover:bg-white/[0.03] transition"
+                >
+                  Back to Login
+                </button>
+              </div>
+            ) : (
+              <form
+                className="space-y-3"
+                autoComplete="off"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  mode === "login" ? handleLogin() : handleCreateAccount();
+                }}
+              >
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="student@chaitanya.edu.in"
+                    autoComplete="off"
+                    name="studentpov_college_email"
+                    className={`${inputClass} pl-10`}
+                  />
+                </div>
+
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={mode === "login" ? "Password" : "Create password"}
+                    autoComplete={mode === "login" ? "current-password" : "new-password"}
+                    name="studentpov_password"
+                    className={`${inputClass} pl-10 pr-11`}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+
+                {mode === "create" && (
+                  <>
+                    <div className="relative">
+                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Re-enter password"
+                        autoComplete="new-password"
+                        name="studentpov_confirm_password"
+                        className={`${inputClass} pl-10 pr-11`}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword((value) => !value)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                       >
-                        {anonymousPrefixes.map((prefix) => (
-                          <option key={prefix} value={prefix}>
-                            {prefix}
-                          </option>
-                        ))}
-                      </select>
-
-                      <span className="text-muted-foreground text-sm">-</span>
-
-                      <div className={`${inputClass} flex-1 text-zinc-500`}>
-                        assigned automatically
-                      </div>
+                        {showConfirmPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
                     </div>
 
-                    <p className="mt-3 text-[12px] text-muted-foreground">
-                      Your public identity will appear as:
-                    </p>
-                    <p className="mt-1 text-[14px] text-white font-medium">
-                      {selectedPrefix}-••••
-                    </p>
-                  </div>
-                </>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    Continue <ArrowRight className="h-4 w-4" />
+                    <IdentityPicker
+                      selectedPrefix={selectedPrefix}
+                      onChange={setSelectedPrefix}
+                    />
                   </>
                 )}
-              </button>
 
-              <button
-                type="button"
-                onClick={() => navigate({ to: "/communities" })}
-                className="w-full rounded-xl border border-white/[0.08] bg-transparent py-3 text-sm text-foreground/85 hover:bg-white/[0.03] transition"
-              >
-                Continue as Anonymous Viewer
-              </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      Continue <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
 
-              <p className="text-center text-[11px] text-muted-foreground">
-                Your college email stays private. Other students see only your anonymous identity.
-              </p>
-            </form>
-)}
+                <button
+                  type="button"
+                  onClick={() => navigate({ to: "/communities" })}
+                  className="w-full rounded-xl border border-white/[0.08] bg-transparent py-3 text-sm text-foreground/85 hover:bg-white/[0.03] transition"
+                >
+                  Continue as Anonymous Viewer
+                </button>
+
+                <p className="text-center text-[11px] text-muted-foreground">
+                  Your college email stays private. Other students see only your anonymous identity.
+                </p>
+              </form>
+            )}
           </div>
         </div>
       </section>
     </main>
+  );
+}
+
+function IdentityPicker({
+  selectedPrefix,
+  onChange,
+}: {
+  selectedPrefix: string;
+  onChange: (prefix: string) => void;
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-[12px] text-muted-foreground">
+        Choose your anonymous identity
+      </p>
+
+      <div className="flex items-center gap-2">
+        <select
+          value={selectedPrefix}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${inputClass} appearance-none flex-1 min-w-0`}
+        >
+          {anonymousPrefixes.map((prefix) => (
+            <option key={prefix} value={prefix}>
+              {prefix}
+            </option>
+          ))}
+        </select>
+
+        <span className="text-muted-foreground text-sm">-</span>
+
+        <div className={`${inputClass} flex-1 min-w-0 text-zinc-500 text-center`}>
+          ••••
+        </div>
+      </div>
+
+      <p className="mt-3 text-[12px] text-muted-foreground">
+        Your public identity will appear as:
+      </p>
+
+      <p className="mt-1 text-[14px] text-white font-medium">
+        {selectedPrefix}-••••
+      </p>
+    </div>
   );
 }
