@@ -218,14 +218,37 @@ toast.success("Your anonymous identity is ready.");
               </button>
             </div>
 
-            <form
-              className="space-y-3"
-              autoComplete="off"
-              onSubmit={(e) => {
-                e.preventDefault();
-                mode === "login" ? handleLogin() : handleCreateAccount();
-              }}
-            >
+            {assignedIdentity ? (
+  <div className="space-y-4 text-center">
+    <p className="text-[12px] text-muted-foreground">
+      Your anonymous identity
+    </p>
+
+    <div className="rounded-2xl bg-zinc-950/80 border border-white/[0.06] px-4 py-4 text-[18px] font-medium text-white">
+      {assignedIdentity}
+    </div>
+
+    <p className="text-[12px] text-muted-foreground">
+      Other students will see this name when you post.
+    </p>
+
+    <button
+      type="button"
+      onClick={() => navigate({ to: "/communities" })}
+      className="w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-medium hover:opacity-90 transition flex items-center justify-center gap-2"
+    >
+      Enter Community <ArrowRight className="h-4 w-4" />
+    </button>
+  </div>
+) : (
+  <form
+    className="space-y-3"
+    autoComplete="off"
+    onSubmit={(e) => {
+      e.preventDefault();
+      mode === "login" ? handleLogin() : handleCreateAccount();
+    }}
+  >
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
@@ -342,6 +365,7 @@ toast.success("Your anonymous identity is ready.");
                 Your college email stays private. Other students see only your anonymous identity.
               </p>
             </form>
+)}
           </div>
         </div>
       </section>
