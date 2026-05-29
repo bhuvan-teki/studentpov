@@ -1,0 +1,2 @@
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'general-chat';
+CREATE INDEX IF NOT EXISTS idx_messages_college_channel_created ON public.messages (college_id, channel, created_at);
