@@ -137,8 +137,8 @@ function AuthPage() {
     try {
       const collegeId = await getCollegeId();
 
-      const { data: assignedUsername, error: usernameError } = await supabase.rpc(
-        "assign_anonymous_username" as any,
+      const { data: assignedUsername, error: usernameError } = await (supabase.rpc as any)(
+        "assign_anonymous_username",
         {
           p_user_id: authData.user.id,
           p_prefix: selectedPrefix,
