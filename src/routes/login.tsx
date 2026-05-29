@@ -172,8 +172,10 @@ function AuthPage() {
 } finally {
   setLoading(false);
 }
+  }
 
   return (
+
     <main className="min-h-screen flex flex-col">
       <TopNav rightSlot={<LiveCount />} />
 
