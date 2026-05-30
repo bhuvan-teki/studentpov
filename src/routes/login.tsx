@@ -498,45 +498,23 @@ function AuthPage() {
   );
 }
 
-function IdentityPicker({
-  selectedPrefix,
-  onChange,
-}: {
-  selectedPrefix: string;
-  onChange: (prefix: string) => void;
-}) {
+function IdentityPicker() {
   return (
     <div>
       <p className="mb-2 text-[12px] text-muted-foreground">
-        Choose your anonymous identity
+        Anonymous identity
       </p>
 
-      <div className="flex items-center gap-2">
-        <select
-          value={selectedPrefix}
-          onChange={(e) => onChange(e.target.value)}
-          className={`${inputClass} appearance-none flex-1 min-w-0`}
-        >
-          {anonymousPrefixes.map((prefix) => (
-            <option key={prefix} value={prefix}>
-              {prefix}
-            </option>
-          ))}
-        </select>
-
-        <span className="text-muted-foreground text-sm">-</span>
-
-        <div className={`${inputClass} flex-1 min-w-0 text-zinc-500 text-center`}>
-          ••••
-        </div>
+      <div className="rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white px-4 py-3">
+        Assigned automatically
       </div>
 
       <p className="mt-3 text-[12px] text-muted-foreground">
-        Your public identity will appear as:
+        Your public identity will look like:
       </p>
 
       <p className="mt-1 text-[14px] text-white font-medium">
-        {selectedPrefix}-••••
+        cosmicwave-x4q8
       </p>
     </div>
   );
