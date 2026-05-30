@@ -161,7 +161,7 @@ function AuthPage() {
 
       if (missingUsername || oldUsername || notVerified || wrongCollege) {
         setIdentitySetupUserId(data.user.id);
-        setSelectedPrefix("lunarglow");
+        // No prefix selection needed. Username is assigned automatically.
         toast.info("Choose your anonymous identity to continue.");
         return;
       }
