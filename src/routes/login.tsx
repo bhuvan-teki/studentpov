@@ -199,11 +199,11 @@ function AuthPage() {
       email: normalizedEmail,
       password,
       options: {
-        data: {
-          anonymous_prefix: selectedPrefix,
-          college_slug: COLLEGE_SLUG,
-        },
-      },
+  data: {
+    anonymous_prefix: "auto",
+    college_slug: COLLEGE_SLUG,
+  },
+},
     });
 
     if (authError || !authData.user) {
