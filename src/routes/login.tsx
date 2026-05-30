@@ -323,15 +323,13 @@ function AuthPage() {
             ) : identitySetupUserId ? (
               <div className="space-y-4">
                 <div className="text-center mb-5">
-                  <h2 className="text-[18px] font-medium text-white">
-                    Set your anonymous identity
-                  </h2>
-                  <p className="mt-2 text-[12px] text-muted-foreground">
-                    Your account needs a public anonymous name before you can post.
-                  </p>
-                </div>
-
-                <IdentityPicker />
+  <h2 className="text-[18px] font-medium text-white">
+    Activate your anonymous identity
+  </h2>
+  <p className="mt-2 text-[12px] text-muted-foreground">
+    Your anonymous name will be assigned automatically.
+  </p>
+</div>
 
                 <button
                   type="button"
