@@ -77,12 +77,12 @@ function AuthPage() {
     const collegeId = await getCollegeId();
 
     const { data: assignedUsername, error: usernameError } = await (supabase.rpc as any)(
-      "assign_anonymous_username",
-      {
-        p_user_id: userId,
-        p_prefix: selectedPrefix,
-      }
-    );
+  "assign_anonymous_username",
+  {
+    p_user_id: userId,
+    p_prefix: "auto",
+  }
+);
 
     if (usernameError || !assignedUsername) {
       console.error("USERNAME ASSIGNMENT ERROR:", usernameError);
