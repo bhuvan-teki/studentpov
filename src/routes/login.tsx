@@ -355,10 +355,7 @@ function AuthPage() {
                   </p>
                 </div>
 
-                <IdentityPicker
-                  selectedPrefix={selectedPrefix}
-                  onChange={setSelectedPrefix}
-                />
+                <IdentityPicker />
 
                 <button
                   type="button"
