@@ -196,15 +196,15 @@ function AuthPage() {
 
   try {
     const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password,
-      options: {
-  data: {
-    anonymous_prefix: "auto",
-    college_slug: COLLEGE_SLUG,
+  email: normalizedEmail,
+  password,
+  options: {
+    data: {
+      anonymous_prefix: "auto",
+      college_slug: COLLEGE_SLUG,
+    },
   },
-},
-    });
+});
 
     if (authError || !authData.user) {
       const msg = authError?.message?.toLowerCase() || "";
