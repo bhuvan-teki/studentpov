@@ -15,24 +15,6 @@ type Mode = "login" | "create";
 const COLLEGE_DOMAIN = "@chaitanya.edu.in";
 const COLLEGE_SLUG = "chaitanya-deemed";
 
-const anonymousPrefixes = [
-  "lunargleam", "lunardusk", "lunarhaze", "lunardrift", "lunarglow", "lunarwave",
-  "velvetgleam", "velvetdusk", "velvethaze", "velvetdrift", "velvetglow", "velvetwave",
-  "silvergleam", "silverdusk", "silverhaze", "silverdrift", "silverglow", "silverwave",
-  "indigogleam", "indigodusk", "indigohaze", "indigodrift", "indigoglow", "indigowave",
-  "violetgleam", "violetdusk", "violethaze", "violetdrift", "violetglow", "violetwave",
-  "nightgleam", "nightdusk", "nighthaze", "nightdrift", "nightglow", "nightwave",
-  "cosmicgleam", "cosmicdusk", "cosmichaze", "cosmicdrift", "cosmicglow", "cosmicwave",
-  "stellargleam", "stellardusk", "stellarhaze", "stellardrift", "stellarglow", "stellarwave",
-  "astralgleam", "astraldusk", "astralhaze", "astraldrift", "astralglow", "astralwave",
-  "ambientgleam", "ambientdusk", "ambienthaze", "ambientdrift", "ambientglow", "ambientwave",
-  "lucidgleam", "luciddusk", "lucidhaze", "luciddrift", "lucidglow", "lucidwave",
-  "opalgleam", "opaldusk", "opalhaze", "opaldrift", "opalglow", "opalwave",
-  "radiantgleam", "radiantdusk", "radianthaze", "radiantdrift", "radiantglow", "radiantwave",
-  "softgleam", "softdusk", "softhaze", "softdrift", "softglow", "softwave",
-  "quietgleam", "quietdusk", "quiethaze", "quietdrift", "quietglow", "quietwave",
-];
-
 const inputClass =
   "w-full rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white placeholder:text-zinc-500 px-4 py-3 outline-none transition focus:border-white/[0.12] focus:bg-zinc-950 shadow-none";
 
@@ -48,11 +30,7 @@ function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Prefix is now assigned automatically by the database.
   const [assignedIdentity, setAssignedIdentity] = useState<string | null>(null);
-
-  // Used when an old or broken account logs in with:
-  // null username, pending verification, or anonymous_3 style username.
   const [identitySetupUserId, setIdentitySetupUserId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
@@ -77,12 +55,12 @@ function AuthPage() {
     const collegeId = await getCollegeId();
 
     const { data: assignedUsername, error: usernameError } = await (supabase.rpc as any)(
-  "assign_anonymous_username",
-  {
-    p_user_id: userId,
-    p_prefix: "auto",
-  }
-);
+      "assign_anonymous_username",
+      {
+        p_user_id: userId,
+        p_prefix: "auto",
+      }
+    );
 
     if (usernameError || !assignedUsername) {
       console.error("USERNAME ASSIGNMENT ERROR:", usernameError);
@@ -135,11 +113,10 @@ function AuthPage() {
       });
 
       if (error || !data.user) {
-  console.error("LOGIN AUTH ERROR:", error);
-  setLoading(false);
-  toast.error(error?.message || "Login failed.");
-  return;
-}
+        console.error("LOGIN AUTH ERROR:", error);
+        toast.error(error?.message || "Login failed.");
+        return;
+      }
 
       const collegeId = await getCollegeId();
 
@@ -161,8 +138,7 @@ function AuthPage() {
 
       if (missingUsername || oldUsername || notVerified || wrongCollege) {
         setIdentitySetupUserId(data.user.id);
-        // No prefix selection needed. Username is assigned automatically.
-        toast.info("Choose your anonymous identity to continue.");
+        toast.info("Set your anonymous identity to continue.");
         return;
       }
 
@@ -177,83 +153,83 @@ function AuthPage() {
   }
 
   async function handleCreateAccount() {
-  if (!normalizedEmail.endsWith(COLLEGE_DOMAIN)) {
-    toast.error("Only Chaitanya student emails are allowed.");
-    return;
-  }
+    if (!normalizedEmail.endsWith(COLLEGE_DOMAIN)) {
+      toast.error("Only Chaitanya student emails are allowed.");
+      return;
+    }
 
-  if (password.length < 6) {
-    toast.error("Password must be at least 6 characters.");
-    return;
-  }
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters.");
+      return;
+    }
 
-  if (password !== confirmPassword) {
-    toast.error("Passwords do not match.");
-    return;
-  }
+    if (password !== confirmPassword) {
+      toast.error("Passwords do not match.");
+      return;
+    }
 
-  setLoading(true);
+    setLoading(true);
 
-  try {
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-  email: normalizedEmail,
-  password,
-  options: {
-    data: {
-      anonymous_prefix: "auto",
-      college_slug: COLLEGE_SLUG,
-    },
-  },
-});
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: {
+          data: {
+            anonymous_prefix: "auto",
+            college_slug: COLLEGE_SLUG,
+          },
+        },
+      });
 
-    if (authError || !authData.user) {
-      const msg = authError?.message?.toLowerCase() || "";
+      if (authError || !authData.user) {
+        const msg = authError?.message?.toLowerCase() || "";
 
-      if (
-        msg.includes("already registered") ||
-        msg.includes("already exists") ||
-        msg.includes("user already")
-      ) {
-        toast.error("User already registered. Try logging in.");
+        if (
+          msg.includes("already registered") ||
+          msg.includes("already exists") ||
+          msg.includes("user already")
+        ) {
+          toast.error("User already registered. Try logging in.");
+          setMode("login");
+          return;
+        }
+
+        throw authError || new Error("Account creation failed.");
+      }
+
+      if (!authData.session) {
+        toast.error(
+          "Account created. Confirm Email is still enabled, so instant entry is blocked."
+        );
         setMode("login");
         return;
       }
 
-      throw authError || new Error("Account creation failed.");
+      const { data: createdProfile, error: profileError } = await supabase
+        .from("profiles")
+        .select("anonymous_username, verification_status, college_id")
+        .eq("id", authData.user.id)
+        .single();
+
+      if (profileError || !createdProfile?.anonymous_username) {
+        console.error("CREATED PROFILE FETCH ERROR:", profileError);
+        throw profileError || new Error("Profile identity was not created.");
+      }
+
+      if (createdProfile.verification_status !== "verified") {
+        throw new Error("Profile was created but is not verified.");
+      }
+
+      setAssignedIdentity(createdProfile.anonymous_username);
+      toast.success("Your anonymous identity is ready.");
+    } catch (err: any) {
+      console.error("ACCOUNT SETUP ERROR:", err);
+      toast.error(err?.message || "Profile setup failed.");
+    } finally {
+      setLoading(false);
     }
-
-    if (!authData.session) {
-      toast.error(
-        "Account created. Confirm Email is still enabled, so instant entry is blocked."
-      );
-      setMode("login");
-      return;
-    }
-
-    const { data: createdProfile, error: profileError } = await supabase
-      .from("profiles")
-      .select("anonymous_username, verification_status, college_id")
-      .eq("id", authData.user.id)
-      .single();
-
-    if (profileError || !createdProfile?.anonymous_username) {
-      console.error("CREATED PROFILE FETCH ERROR:", profileError);
-      throw profileError || new Error("Profile identity was not created.");
-    }
-
-    if (createdProfile.verification_status !== "verified") {
-      throw new Error("Profile was created but is not verified.");
-    }
-
-    setAssignedIdentity(createdProfile.anonymous_username);
-    toast.success("Your anonymous identity is ready.");
-  } catch (err: any) {
-    console.error("ACCOUNT SETUP ERROR:", err);
-    toast.error(err?.message || "Profile setup failed.");
-  } finally {
-    setLoading(false);
   }
-}
 
   async function handleExistingIdentitySetup() {
     if (!identitySetupUserId) return;
@@ -454,10 +430,7 @@ function AuthPage() {
                       </button>
                     </div>
 
-                    <IdentityPicker
-                      selectedPrefix={selectedPrefix}
-                      onChange={setSelectedPrefix}
-                    />
+                    <IdentityPicker />
                   </>
                 )}
 
