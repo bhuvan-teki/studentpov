@@ -48,7 +48,7 @@ function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [selectedPrefix, setSelectedPrefix] = useState("lunarglow");
+  // Prefix is now assigned automatically by the database.
   const [assignedIdentity, setAssignedIdentity] = useState<string | null>(null);
 
   // Used when an old or broken account logs in with:
