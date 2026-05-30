@@ -402,35 +402,31 @@ function AuthPage() {
                 </div>
 
                 {mode === "create" && (
-                  <>
-                    <div className="relative">
-                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <input
-                        type={showConfirmPassword ? "text" : "password"}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Re-enter password"
-                        autoComplete="new-password"
-                        name="studentpov_confirm_password"
-                        className={`${inputClass} pl-10 pr-11`}
-                      />
+  <div className="relative">
+    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+    <input
+      type={showConfirmPassword ? "text" : "password"}
+      value={confirmPassword}
+      onChange={(e) => setConfirmPassword(e.target.value)}
+      placeholder="Re-enter password"
+      autoComplete="new-password"
+      name="studentpov_confirm_password"
+      className={`${inputClass} pl-10 pr-11`}
+    />
 
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword((value) => !value)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      >
-                        {showConfirmPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-
-                    <IdentityPicker />
-                  </>
-                )}
+    <button
+      type="button"
+      onClick={() => setShowConfirmPassword((value) => !value)}
+      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+    >
+      {showConfirmPassword ? (
+        <EyeOff className="h-4 w-4" />
+      ) : (
+        <Eye className="h-4 w-4" />
+      )}
+    </button>
+  </div>
+)}
 
                 <button
                   type="submit"
@@ -463,27 +459,5 @@ function AuthPage() {
         </div>
       </section>
     </main>
-  );
-}
-
-function IdentityPicker() {
-  return (
-    <div>
-      <p className="mb-2 text-[12px] text-muted-foreground">
-        Anonymous identity
-      </p>
-
-      <div className="rounded-2xl bg-zinc-950/80 border border-white/[0.06] text-white px-4 py-3">
-        Assigned automatically
-      </div>
-
-      <p className="mt-3 text-[12px] text-muted-foreground">
-        Your public identity will look like:
-      </p>
-
-      <p className="mt-1 text-[14px] text-white font-medium">
-        cosmicwave-x4q8
-      </p>
-    </div>
   );
 }
